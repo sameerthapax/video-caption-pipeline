@@ -23,13 +23,15 @@ tests/              Backend tests
 
 - `GET /healthz`
 - `POST /api/videos/upload/`
+- `POST /api/videos/upload/complete/`
 - `GET /api/jobs/{job_id}/status/`
 - `GET /api/jobs/{job_id}/result/`
 
 ## Design Notes
 
 - The API does not own media processing logic.
-- Upload currently stores the file locally and creates a `VideoJob` in status `uploaded`.
+- Upload preparation creates a pending `VideoJob`, returns a signed Supabase Storage URL, and the browser uploads the file directly to the `videos` bucket.
+- Upload completion verifies the object metadata in Supabase Storage before moving the job to status `uploaded`.
 - Result retrieval returns `409` until the worker service creates a `VideoCaptionResult`.
 - Tables are initialized on startup with SQLAlchemy metadata for speed during scaffolding.
 
@@ -71,4 +73,4 @@ npm run test:api
 ## Next Steps
 
 - Add Alembic for explicit schema migrations
-- Replace local media writes with Supabase Storage
+- Start worker processing automatically once uploads are verified

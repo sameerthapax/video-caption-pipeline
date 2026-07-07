@@ -2,9 +2,10 @@ import type { VideoJobStatusResponse } from '@shared-types';
 
 type StatusPanelProps = {
   status: VideoJobStatusResponse;
+  successMessage?: string | null;
 };
 
-export function StatusPanel({ status }: StatusPanelProps) {
+export function StatusPanel({ status, successMessage }: StatusPanelProps) {
   return (
     <section className="panel">
       <div className="panel-header">
@@ -35,6 +36,7 @@ export function StatusPanel({ status }: StatusPanelProps) {
           <dd>{status.originalFilename}</dd>
         </div>
       </dl>
+      {successMessage ? <p className="success">{successMessage}</p> : null}
       {status.errorMessage ? <p className="error">{status.errorMessage}</p> : null}
     </section>
   );

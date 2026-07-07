@@ -3,12 +3,13 @@ import { StatusPanel } from '../components/StatusPanel';
 
 type JobStatusPageProps = {
   status: VideoJobStatusResponse;
+  successMessage?: string | null;
 };
 
-export function JobStatusPage({ status }: JobStatusPageProps) {
+export function JobStatusPage({ status, successMessage }: JobStatusPageProps) {
   return (
     <div className="page-shell">
-      <StatusPanel status={status} />
+      <StatusPanel status={status} successMessage={successMessage} />
       <aside className="info-card">
         <div className="eyebrow">Worker Steps</div>
         <ol>

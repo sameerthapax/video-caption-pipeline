@@ -21,13 +21,17 @@ class Settings(BaseSettings):
     supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
     supabase_anon_key: str | None = Field(default=None, alias="SUPABASE_ANON_KEY")
     supabase_service_role_key: str | None = Field(default=None, alias="SUPABASE_SERVICE_ROLE_KEY")
+    supabase_storage_bucket: str = Field(default="videos", alias="SUPABASE_STORAGE_BUCKET")
+    worker_invoke_url: str = Field(
+        default="http://127.0.0.1:8001/invoke/video-job",
+        alias="WORKER_INVOKE_URL",
+    )
     redis_url: str = Field(default="redis://127.0.0.1:6379/0", alias="REDIS_URL")
     redis_key_prefix: str = Field(default="video-caption-pipeline", alias="REDIS_KEY_PREFIX")
     auth_rate_limit_window_seconds: int = Field(default=60, alias="AUTH_RATE_LIMIT_WINDOW_SECONDS")
     auth_rate_limit_max_requests: int = Field(default=10, alias="AUTH_RATE_LIMIT_MAX_REQUESTS")
     upload_rate_limit_window_seconds: int = Field(default=60, alias="UPLOAD_RATE_LIMIT_WINDOW_SECONDS")
     upload_rate_limit_max_requests: int = Field(default=20, alias="UPLOAD_RATE_LIMIT_MAX_REQUESTS")
-    media_root: Path = Path(__file__).resolve().parents[2] / "media"
 
     @property
     def cors_origins(self) -> list[str]:
@@ -36,10 +40,6 @@ class Settings(BaseSettings):
     @property
     def allowed_hosts(self) -> list[str]:
         return [host.strip() for host in self.allowed_hosts_raw.split(",") if host.strip()]
-
-    @property
-    def video_upload_root(self) -> Path:
-        return self.media_root / "videos"
 
 
 settings = Settings()

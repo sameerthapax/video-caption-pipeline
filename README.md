@@ -38,12 +38,14 @@ And excludes:
 ```text
 apps/web (React + TS)
   -> POST /api/videos/upload/
+  -> PUT signed Supabase Storage upload URL
+  -> POST /api/videos/upload/complete/
   -> poll GET /api/jobs/{job_id}/status/
   -> GET /api/jobs/{job_id}/result/
 
 apps/api (FastAPI)
-  -> stores upload and owns auth/session state
-  -> creates VideoJob
+  -> creates signed upload target and owns auth/session state
+  -> verifies uploaded storage object
   -> returns job/result state from Postgres
 
 apps/worker (Python worker)
@@ -223,7 +225,7 @@ Notes:
 
 - The backend container starts FastAPI with Uvicorn.
 - `DATABASE_URL` points from the backend container to the local Supabase Postgres port on the host.
-- Uploaded videos are stored in a Docker volume mounted at `/app/media`.
+- Uploaded videos go directly from the browser to the Supabase Storage `videos` bucket with a signed upload URL.
 - The frontend container runs the Vite dev server so UI behavior stays easy to test locally.
 - If you want to change API or CORS settings, update `.env` before starting Compose.
 
@@ -255,6 +257,7 @@ Notes:
 - `POST /api/auth/logout/`
 - `GET /api/auth/session/`
 - `POST /api/videos/upload/` (requires auth cookie)
+- `POST /api/videos/upload/complete/` (requires auth cookie)
 - `GET /api/jobs/{job_id}/status/` (requires auth cookie, owner only)
 - `GET /api/jobs/{job_id}/result/` (requires auth cookie, owner only)
 

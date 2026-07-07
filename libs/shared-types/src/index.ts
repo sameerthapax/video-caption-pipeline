@@ -1,8 +1,20 @@
-export type VideoJobStatus = 'uploaded' | 'processing' | 'completed' | 'failed';
+export type VideoJobStatus = 'pending_upload' | 'uploaded' | 'queued' | 'processing' | 'completed' | 'failed';
 
 export interface UploadResponse {
   jobId: string;
   status: VideoJobStatus;
+}
+
+export interface UploadPreparationResponse extends UploadResponse {
+  bucket: string;
+  objectPath: string;
+  uploadUrl: string;
+  uploadMethod: 'PUT';
+  uploadHeaders: Record<string, string>;
+}
+
+export interface UploadCompletionResponse extends UploadResponse {
+  verified: boolean;
 }
 
 export interface VideoJobStatusResponse {

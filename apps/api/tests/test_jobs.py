@@ -7,7 +7,10 @@ def test_status_returns_job(client):
     job = VideoJob(
         user_id="test-user-id",
         original_filename="pending.mp4",
+        storage_bucket="videos",
         video_path="videos/pending.mp4",
+        upload_content_type="video/mp4",
+        upload_file_size=1234,
         status="uploaded",
         current_step="uploaded",
         progress=5,
@@ -29,7 +32,10 @@ def test_result_returns_conflict_without_record(client):
     job = VideoJob(
         user_id="test-user-id",
         original_filename="pending.mp4",
+        storage_bucket="videos",
         video_path="videos/pending.mp4",
+        upload_content_type="video/mp4",
+        upload_file_size=1234,
         status="uploaded",
         current_step="uploaded",
         progress=5,
@@ -50,7 +56,10 @@ def test_result_returns_record_when_present(client):
     job = VideoJob(
         user_id="test-user-id",
         original_filename="complete.mp4",
+        storage_bucket="videos",
         video_path="videos/complete.mp4",
+        upload_content_type="video/mp4",
+        upload_file_size=1234,
         status="completed",
         current_step="completed",
         progress=100,
@@ -84,7 +93,10 @@ def test_status_hides_other_users_jobs(client):
     job = VideoJob(
         user_id="another-user-id",
         original_filename="hidden.mp4",
+        storage_bucket="videos",
         video_path="videos/hidden.mp4",
+        upload_content_type="video/mp4",
+        upload_file_size=1234,
         status="uploaded",
         current_step="uploaded",
         progress=5,

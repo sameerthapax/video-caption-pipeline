@@ -1,5 +1,6 @@
 import type {
   CaptionResultResponse,
+  UploadPreparationResponse,
   UploadResponse,
   VideoJobStatusResponse
 } from '@shared-types';
@@ -20,6 +21,35 @@ type AuthSessionResponseApi = {
 type UploadResponseApi = {
   job_id: string;
   status: UploadResponse['status'];
+};
+
+type UploadPreparationRequestApi = {
+  filename: string;
+  content_type: string;
+  file_size: number;
+};
+
+type UploadPreparationResponseApi = UploadResponseApi & {
+  bucket: string;
+  object_path: string;
+  upload_url: string;
+  upload_method: 'PUT';
+  upload_headers: Record<string, string>;
+};
+
+type UploadCompletionRequestApi = {
+  job_id: string;
+  object_path: string;
+  file_size: number;
+  content_type: string;
+};
+
+export type UploadStreamEvent = {
+  event: string;
+  jobId: string;
+  step: string;
+  message: string;
+  progress?: number;
 };
 
 type VideoJobStatusResponseApi = {
@@ -48,8 +78,16 @@ async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
-      const payload = (await response.json()) as { detail?: string };
-      throw new Error(payload.detail || `Request failed with status ${response.status}`);
+      const payload = (await response.json()) as { detail?: string | { msg?: string }[]; errors?: { msg?: string }[] };
+      const detail =
+        typeof payload.detail === 'string'
+          ? payload.detail
+          : Array.isArray(payload.detail)
+            ? payload.detail.map((item) => item.msg).filter(Boolean).join(', ')
+            : Array.isArray(payload.errors)
+              ? payload.errors.map((item) => item.msg).filter(Boolean).join(', ')
+              : null;
+      throw new Error(detail || `Request failed with status ${response.status}`);
     }
 
     const text = await response.text();
@@ -133,20 +171,226 @@ export async function getSession(): Promise<AuthUser> {
   return payload.user;
 }
 
-export async function uploadVideo(file: File): Promise<UploadResponse> {
-  const formData = new FormData();
-  formData.append('video', file);
+export async function uploadVideo(
+  file: File,
+  onProgress?: (progress: number) => void,
+  onStreamEvent?: (event: UploadStreamEvent) => void
+): Promise<{ jobId: string }> {
+  const preparation = await prepareVideoUpload(file);
+  await uploadFileToSignedUrl(preparation, file, onProgress);
+  await completeVideoUploadStream(preparation, file, onStreamEvent);
+  return { jobId: preparation.jobId };
+}
 
+async function prepareVideoUpload(file: File): Promise<UploadPreparationResponse> {
+  const contentType = file.type || inferVideoContentType(file.name);
   const response = await apiFetch('/api/videos/upload/', {
     method: 'POST',
-    body: formData
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      filename: file.name,
+      content_type: contentType,
+      file_size: file.size
+    } satisfies UploadPreparationRequestApi)
   });
 
-  const payload = await parseResponse<UploadResponseApi>(response);
+  const payload = await parseResponse<UploadPreparationResponseApi>(response);
   return {
     jobId: payload.job_id,
-    status: payload.status
+    status: payload.status,
+    bucket: payload.bucket,
+    objectPath: payload.object_path,
+    uploadUrl: payload.upload_url,
+    uploadMethod: payload.upload_method,
+    uploadHeaders: payload.upload_headers
   };
+}
+
+function uploadFileToSignedUrl(
+  preparation: UploadPreparationResponse,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(preparation.uploadMethod, preparation.uploadUrl, true);
+
+    for (const [key, value] of Object.entries(preparation.uploadHeaders)) {
+      xhr.setRequestHeader(key, value);
+    }
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (!event.lengthComputable || !onProgress) {
+        return;
+      }
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve();
+        return;
+      }
+
+      reject(new Error(xhr.responseText || `Upload failed with status ${xhr.status}`));
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error while uploading to storage.'));
+    });
+
+    xhr.send(file);
+  });
+}
+
+async function completeVideoUploadStream(
+  preparation: UploadPreparationResponse,
+  file: File,
+  onStreamEvent?: (event: UploadStreamEvent) => void
+): Promise<void> {
+  const response = await apiFetch('/api/videos/upload/complete/stream', {
+    method: 'POST',
+    headers: {
+      Accept: 'text/event-stream',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      job_id: preparation.jobId,
+      object_path: preparation.objectPath,
+      file_size: file.size,
+      content_type: file.type || inferVideoContentType(file.name)
+    } satisfies UploadCompletionRequestApi)
+  });
+
+  if (!response.ok) {
+    throw await buildResponseError(response);
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming upload completion response did not include a body.');
+  }
+
+  await readEventStream(response, (rawEvent) => {
+    if (!rawEvent.data) {
+      return;
+    }
+
+    const payload = JSON.parse(rawEvent.data) as {
+      event: string;
+      job_id: string;
+      step: string;
+      message: string;
+      progress?: number;
+    };
+
+    onStreamEvent?.({
+      event: payload.event,
+      jobId: payload.job_id,
+      step: payload.step,
+      message: payload.message,
+      progress: payload.progress
+    });
+
+    if (payload.event === 'failed') {
+      throw new Error(payload.message || 'Upload completion stream failed.');
+    }
+  });
+}
+
+function inferVideoContentType(filename: string): string {
+  const extension = filename.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'mp4':
+      return 'video/mp4';
+    case 'mov':
+      return 'video/quicktime';
+    case 'webm':
+      return 'video/webm';
+    case 'mkv':
+      return 'video/x-matroska';
+    case 'm4v':
+      return 'video/x-m4v';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+async function buildResponseError(response: Response): Promise<Error> {
+  try {
+    await parseResponse(response);
+  } catch (error) {
+    return error instanceof Error ? error : new Error('Request failed.');
+  }
+
+  return new Error(`Request failed with status ${response.status}`);
+}
+
+async function readEventStream(
+  response: Response,
+  onEvent: (event: { event: string; data: string }) => void
+): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Streaming response body could not be read.');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+    let boundaryMatch = buffer.match(/\r?\n\r?\n/);
+    while (boundaryMatch?.index !== undefined) {
+      const boundaryLength = boundaryMatch[0].length;
+      const rawChunk = buffer.slice(0, boundaryMatch.index);
+      buffer = buffer.slice(boundaryMatch.index + boundaryLength);
+      const parsedEvent = parseSseChunk(rawChunk);
+      if (parsedEvent) {
+        onEvent(parsedEvent);
+      }
+      boundaryMatch = buffer.match(/\r?\n\r?\n/);
+    }
+
+    if (done) {
+      const trailingEvent = parseSseChunk(buffer);
+      if (trailingEvent) {
+        onEvent(trailingEvent);
+      }
+      return;
+    }
+  }
+}
+
+function parseSseChunk(chunk: string): { event: string; data: string } | null {
+  const lines = chunk
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0 && !line.startsWith(':'));
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  let event = 'message';
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('event:')) {
+      event = line.slice('event:'.length).trim();
+      continue;
+    }
+
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trim());
+    }
+  }
+
+  return dataLines.length > 0 ? { event, data: dataLines.join('\n') } : null;
 }
 
 export async function getJobStatus(jobId: string): Promise<VideoJobStatusResponse> {

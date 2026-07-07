@@ -23,7 +23,8 @@ main.py
 ## Current Role
 
 - Runs as a separate service from the FastAPI API
-- Owns processing orchestration
+- Exposes an HTTP invocation endpoint for local development that mirrors cloud-style worker triggering
+- Logs when a queued job becomes visible to the worker
 - Will eventually pull queued jobs, process them, and persist results back to Postgres
 
 ## Local Run
@@ -33,3 +34,5 @@ From repo root:
 ```bash
 npm run dev:worker
 ```
+
+This starts the worker HTTP service on `http://127.0.0.1:8001`.

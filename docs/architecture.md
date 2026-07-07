@@ -12,11 +12,12 @@
 ## Request Flow
 
 1. User uploads a short video in the web client.
-2. Frontend posts the file to `POST /api/videos/upload/`.
-3. FastAPI stores the file, creates a `VideoJob`, and exposes job state through Postgres-backed endpoints.
-4. The worker service claims queued jobs, runs processing steps, and persists a `VideoCaptionResult`.
-5. Frontend polls `GET /api/jobs/{job_id}/status/` every two seconds until the job completes.
-6. Frontend loads `GET /api/jobs/{job_id}/result/` and displays the neutral summary plus the four caption variants.
+2. Frontend posts metadata to `POST /api/videos/upload/` and receives a signed Supabase Storage upload URL plus the object path for a pending `VideoJob`.
+3. Frontend uploads the file directly to the private `videos` bucket, then calls `POST /api/videos/upload/complete/stream`.
+4. FastAPI verifies the stored object metadata, marks the job `queued`, invokes the worker through a dedicated HTTP invoker abstraction, and streams progress via SSE.
+5. The worker service runs as a separate process, receives the invocation on its own port, and logs that the queued job is available.
+6. Frontend still polls `GET /api/jobs/{job_id}/status/` for durable job state while also reflecting the immediate SSE progress stream.
+7. Real processing and `VideoCaptionResult` persistence are still future work.
 
 ## Immediate Tradeoffs
 
@@ -25,4 +26,4 @@
 - SQLAlchemy `create_all()` initializes current tables on startup for speed; FastAPI immediately reapplies the current Supabase RLS policy set after table creation so public tables are not left unsecured.
 - Security middleware is intentionally lightweight and app-local right now: Redis-backed rate limiting, CSRF validation for cookie-authenticated writes, `TrustedHostMiddleware`, and configured CORS.
 - Shared types currently cover the frontend only; backend contracts are documented in `docs/api-contract.md`.
-- Supabase Auth and Storage are still planned, but only Postgres is required right now.
+- Supabase Auth is required, and Supabase Storage now owns browser-direct video uploads; production should still point `DATABASE_URL` at Supabase Postgres so Storage verification and job metadata live in the same project.

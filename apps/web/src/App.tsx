@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from 'react';
 import type { CaptionResultResponse, VideoJobStatusResponse } from '@shared-types';
-import { getJobResult, getJobStatus, uploadVideo } from './api';
+import { getJobResult, getJobStatus, uploadVideo, type UploadStreamEvent } from './api';
 import { AuthContext } from './auth';
 import { AuthGate } from './components/AuthGate';
 import { JobStatusPage } from './pages/JobStatusPage';
@@ -18,6 +18,8 @@ export default function App() {
   const { isReady, logout, user } = useContext(AuthContext);
   const [view, setView] = useState<ViewState>(initialState);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<VideoJobStatusResponse | null>(null);
   const [result, setResult] = useState<CaptionResultResponse | null>(null);
@@ -31,6 +33,8 @@ export default function App() {
 
     setView(initialState);
     setIsUploading(false);
+    setUploadProgress(0);
+    setUploadSuccessMessage(null);
     setError(null);
     setStatus(null);
     setResult(null);
@@ -43,6 +47,7 @@ export default function App() {
 
     const jobId = view.jobId;
     let cancelled = false;
+    let timer = 0;
 
     async function poll() {
       try {
@@ -54,15 +59,29 @@ export default function App() {
         setStatus(nextStatus);
 
         if (nextStatus.status === 'completed') {
-          const nextResult = await getJobResult(jobId);
-          if (!cancelled) {
-            setResult(nextResult);
-            setView({ kind: 'result', jobId });
+          window.clearInterval(timer);
+          try {
+            const nextResult = await getJobResult(jobId);
+            if (!cancelled) {
+              setResult(nextResult);
+              setView({ kind: 'result', jobId });
+            }
+          } catch (resultError) {
+            const message = resultError instanceof Error ? resultError.message : 'Result is not ready yet.';
+            if (!cancelled) {
+              if (message === 'Result is not ready yet.') {
+                setUploadSuccessMessage('Worker stub completed. No caption result has been generated yet.');
+                setError(null);
+              } else {
+                setError(message);
+              }
+            }
           }
           return;
         }
 
         if (nextStatus.status === 'failed') {
+          window.clearInterval(timer);
           setError(nextStatus.errorMessage || 'Pipeline failed.');
           return;
         }
@@ -74,7 +93,7 @@ export default function App() {
     }
 
     poll();
-    const timer = window.setInterval(poll, 2000);
+    timer = window.setInterval(poll, 2000);
 
     return () => {
       cancelled = true;
@@ -99,12 +118,23 @@ export default function App() {
 
   async function handleUpload(file: File) {
     setIsUploading(true);
+    setUploadProgress(0);
+    setUploadSuccessMessage(null);
     setError(null);
     setStatus(null);
     setResult(null);
 
     try {
-      const response = await uploadVideo(file);
+      const response = await uploadVideo(file, setUploadProgress, (event) => {
+        console.log(`[upload stream] ${event.event}`, event);
+        setUploadSuccessMessage(event.message);
+        setView({ kind: 'status', jobId: event.jobId });
+        setStatus((previousStatus) => mapStreamEventToStatus(event, file.name, previousStatus));
+        if (event.event === 'failed') {
+          setError(event.message);
+        }
+      });
+      setUploadSuccessMessage((currentMessage) => currentMessage ?? 'Upload complete. Supabase storage confirmed the object metadata.');
       setView({ kind: 'status', jobId: response.jobId });
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
@@ -115,6 +145,8 @@ export default function App() {
 
   function handleReset() {
     setView(initialState);
+    setUploadProgress(0);
+    setUploadSuccessMessage(null);
     setStatus(null);
     setResult(null);
     setError(null);
@@ -137,12 +169,55 @@ export default function App() {
       </header>
 
       {view.kind === 'upload' ? (
-        <UploadPage error={error} isUploading={isUploading} onUpload={handleUpload} />
+        <UploadPage
+          error={error}
+          isUploading={isUploading}
+          uploadProgress={uploadProgress}
+          successMessage={uploadSuccessMessage}
+          onUpload={handleUpload}
+        />
       ) : null}
 
-      {view.kind === 'status' && status ? <JobStatusPage status={status} /> : null}
+      {view.kind === 'status' && status ? (
+        <JobStatusPage status={status} successMessage={uploadSuccessMessage} />
+      ) : null}
 
       {view.kind === 'result' && result ? <ResultPage onReset={handleReset} result={result} /> : null}
     </main>
   );
+}
+
+function mapStreamEventToStatus(
+  event: UploadStreamEvent,
+  originalFilename: string,
+  previousStatus: VideoJobStatusResponse | null
+): VideoJobStatusResponse {
+  const now = new Date().toISOString();
+
+  return {
+    id: event.jobId,
+    status: mapWorkerEventToJobStatus(event.event),
+    currentStep: event.step,
+    progress: event.progress ?? previousStatus?.progress ?? 0,
+    errorMessage: event.event === 'failed' ? event.message : '',
+    originalFilename,
+    createdAt: previousStatus?.createdAt ?? now,
+    updatedAt: now
+  };
+}
+
+function mapWorkerEventToJobStatus(eventName: string): VideoJobStatusResponse['status'] {
+  if (eventName === 'queued' || eventName === 'worker_invoked' || eventName === 'worker_available') {
+    return 'queued';
+  }
+
+  if (eventName === 'completed') {
+    return 'completed';
+  }
+
+  if (eventName === 'failed') {
+    return 'failed';
+  }
+
+  return 'processing';
 }

@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 
-VideoJobStatus = Literal["uploaded", "processing", "completed", "failed"]
+VideoJobStatus = Literal["pending_upload", "uploaded", "queued", "processing", "completed", "failed"]
 
 
 class VideoJobStatusResponse(BaseModel):

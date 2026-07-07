@@ -2,14 +2,27 @@ import { UploadForm } from '../components/UploadForm';
 
 type UploadPageProps = {
   isUploading: boolean;
+  uploadProgress: number;
+  successMessage: string | null;
   onUpload: (file: File) => Promise<void>;
   error: string | null;
 };
 
-export function UploadPage({ isUploading, onUpload, error }: UploadPageProps) {
+export function UploadPage({
+  isUploading,
+  uploadProgress,
+  successMessage,
+  onUpload,
+  error
+}: UploadPageProps) {
   return (
     <div className="page-shell">
-      <UploadForm isUploading={isUploading} onUpload={onUpload} />
+      <UploadForm
+        isUploading={isUploading}
+        uploadProgress={uploadProgress}
+        successMessage={successMessage}
+        onUpload={onUpload}
+      />
       <aside className="info-card">
         <div className="eyebrow">Output Modes</div>
         <ul>

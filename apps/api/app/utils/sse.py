@@ -1,0 +1,12 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+
+def format_sse(*, event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def format_sse_comment(comment: str) -> str:
+    return f": {comment}\n\n"

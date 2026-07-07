@@ -5,6 +5,9 @@ os.environ["DATABASE_URL"] = "sqlite+pysqlite:///./test_api.db"
 os.environ["CORS_ALLOWED_ORIGINS"] = "http://localhost:5173"
 os.environ["SUPABASE_URL"] = "http://localhost:54321"
 os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
+os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "test-service-role-key"
+os.environ["SUPABASE_STORAGE_BUCKET"] = "videos"
+os.environ["WORKER_INVOKE_URL"] = "http://worker.test/invoke/video-job"
 
 import pytest
 from fastapi.testclient import TestClient
