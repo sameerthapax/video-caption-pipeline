@@ -1,0 +1,11 @@
+node_modules
+dist
+.nx
+.git
+.idea
+venv
+apps/api/__pycache__
+apps/api/*.sqlite3
+apps/api/db.sqlite3
+apps/api/media/videos/*
+!apps/api/media/videos/.gitkeep

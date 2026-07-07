@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "../../dist/apps/web/tsconfig.tsbuildinfo",
+    "types": [
+      "vite/client",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src",
+    "vite.config.ts",
+    "../../libs/shared-types/src/**/*.ts"
+  ]
+}
