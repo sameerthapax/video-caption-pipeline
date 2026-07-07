@@ -26,8 +26,8 @@ export function UploadForm({ isUploading, onUpload }: UploadFormProps) {
       <div className="eyebrow">Hackathon Starter</div>
       <h1>Upload a clip and generate four caption styles.</h1>
       <p className="lede">
-        The placeholder pipeline simulates video normalization, frame analysis, transcription,
-        and caption generation so the product flow is ready before the real AI stack lands.
+        Submit a video job to the API. A separate worker service will normalize media, extract
+        frames, transcribe audio, and generate the final caption set.
       </p>
       <form className="upload-form" onSubmit={handleSubmit}>
         <label className="upload-input">
@@ -41,7 +41,7 @@ export function UploadForm({ isUploading, onUpload }: UploadFormProps) {
         </label>
         {error ? <p className="error">{error}</p> : null}
         <button className="primary-button" disabled={isUploading} type="submit">
-          {isUploading ? 'Uploading...' : 'Start pipeline'}
+          {isUploading ? 'Uploading...' : 'Queue job'}
         </button>
       </form>
     </section>

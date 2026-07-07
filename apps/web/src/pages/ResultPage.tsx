@@ -13,7 +13,7 @@ export function ResultPage({ result, onReset }: ResultPageProps) {
         <div className="panel-header">
           <div>
             <div className="eyebrow">Neutral Summary</div>
-            <h2>Pipeline output is ready.</h2>
+            <h2>Worker output is ready.</h2>
           </div>
           <button className="secondary-button" onClick={onReset} type="button">
             Upload another

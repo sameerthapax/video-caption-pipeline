@@ -23,6 +23,6 @@ export interface CaptionResultResponse {
   sarcasticCaption: string;
   humorousTechCaption: string;
   humorousNonTechCaption: string;
-  rawPipelineJson: Record<string, unknown>;
+  rawOutputJson: Record<string, unknown>;
   createdAt: string;
 }

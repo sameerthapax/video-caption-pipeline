@@ -46,7 +46,7 @@ Response `200 OK`:
   "sarcastic_caption": "Sarcastic caption text",
   "humorous_tech_caption": "Humorous tech caption text",
   "humorous_non_tech_caption": "Humorous non-tech caption text",
-  "raw_pipeline_json": {},
+  "raw_output_json": {},
   "created_at": "2026-07-06T20:00:15Z"
 }
 ```
@@ -56,3 +56,4 @@ Response `200 OK`:
 - `409 Conflict` on the result endpoint means the job exists but output is not ready yet.
 - `404 Not Found` is returned when the job ID does not exist.
 - The frontend maps the snake_case API fields into camelCase client types.
+- The API surface is worker-agnostic: processing happens in the separate worker service, not inside FastAPI.

@@ -1,17 +1,18 @@
 # Video Caption Pipeline
 
-Hackathon-ready monorepo skeleton for uploading short videos, running a placeholder backend processing pipeline, and rendering captions in four tones on the frontend.
+Hackathon-ready monorepo skeleton for uploading short videos with a dedicated API app and a separate processing worker app.
 
 ## Project Overview
 
 - Monorepo manager: Nx
 - Frontend: React + TypeScript with Vite
-- Backend: Django + Django REST Framework
+- Backend API: FastAPI + SQLAlchemy
+- Worker: Python processing service scaffold
 - Database/Auth/Storage: Supabase
 - Infra scaffold: Terraform
 - CI scaffold: GitHub Actions
 
-The current implementation is intentionally simple: local file uploads, Supabase-backed Postgres via `DATABASE_URL`, and a background thread that simulates the future AI pipeline without adding queues or orchestration yet.
+The current implementation is intentionally simple: local file uploads, Supabase-backed Postgres via `DATABASE_URL`, a structured FastAPI API app for auth and persistence, and a separate worker scaffold for future processing orchestration.
 
 For local data services, the repo now uses the existing `supabase/` project with a pruned CLI stack that keeps:
 
@@ -40,11 +41,15 @@ apps/web (React + TS)
   -> poll GET /api/jobs/{job_id}/status/
   -> GET /api/jobs/{job_id}/result/
 
-apps/api (Django + DRF)
-  -> stores upload under apps/api/media/videos/
+apps/api (FastAPI)
+  -> stores upload and owns auth/session state
   -> creates VideoJob
-  -> runs placeholder pipeline thread
-  -> saves VideoCaptionResult
+  -> returns job/result state from Postgres
+
+apps/worker (Python worker)
+  -> claims processing jobs
+  -> runs normalize/extract/transcribe/describe/summarize/style steps
+  -> writes result state back to Postgres
 
 libs/shared-types
   -> shared frontend API types
@@ -61,7 +66,8 @@ infra/terraform
 ```text
 apps/
   web/                  React + TypeScript frontend
-  api/                  Django backend and placeholder pipeline
+  api/                  FastAPI auth + persistence API
+  worker/               Processing worker scaffold
 libs/
   shared-types/         Shared frontend TypeScript contracts
 docs/                   Architecture and API docs
@@ -104,10 +110,11 @@ Important variables:
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `DATABASE_URL`
-- `DJANGO_SECRET_KEY`
-- `DJANGO_DEBUG`
-- `DJANGO_ALLOWED_HOSTS`
-- `DJANGO_CORS_ALLOWED_ORIGINS`
+- `REDIS_URL`
+- `REDIS_KEY_PREFIX`
+- `APP_ENV`
+- `APP_DEBUG`
+- `CORS_ALLOWED_ORIGINS`
 
 `DATABASE_URL` is required.
 
@@ -115,12 +122,15 @@ For the local Supabase stack, start from `.env.example`. The important local def
 
 - `SUPABASE_URL=http://127.0.0.1:54321`
 - `DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres`
+- `REDIS_URL=redis://127.0.0.1:6379/0`
 
 After starting Supabase, replace the placeholder auth keys with the output of:
 
 ```bash
 npm run supabase:env
 ```
+
+The frontend only needs `VITE_API_BASE_URL`. FastAPI owns the Supabase auth credentials and is the only layer that talks to Supabase Auth.
 
 ### 3. Prepare the backend database
 
@@ -130,11 +140,11 @@ Start the local Supabase stack first:
 npm run supabase:start
 ```
 
-Then load the generated environment values you need and run Django migrations:
+Then load the generated environment values you need and start the API. The FastAPI app creates its current tables on startup:
 
 ```bash
 source venv/bin/activate
-python apps/api/manage.py migrate
+npm run dev:api
 ```
 
 ### 4. Run local development
@@ -144,6 +154,25 @@ Backend only:
 ```bash
 source venv/bin/activate
 npm run dev:api
+```
+
+Worker only:
+
+```bash
+source venv/bin/activate
+npm run dev:worker
+```
+
+Redis only for backend development:
+
+```bash
+npm run redis:start
+```
+
+API + worker + Redis in containers:
+
+```bash
+npm run dev:stack
 ```
 
 Frontend only:
@@ -159,6 +188,22 @@ source venv/bin/activate
 npm run dev
 ```
 
+Auth behavior:
+
+- Email/password login and signup are handled by FastAPI, which proxies requests to Supabase Auth.
+- The browser only talks to FastAPI and uses HTTP-only auth cookies.
+- Authenticated `POST` requests also require the `X-CSRF-Token` header that matches the `vp_csrf_token` cookie.
+- Browser sessions are signed out after 30 minutes of inactivity in the client.
+- Local Supabase JWT expiry is configured to 30 minutes in [supabase/config.toml](/Users/sams/Desktop/video-caption-pipeline/supabase/config.toml:1).
+
+Security middleware:
+
+- CORS is restricted to configured origins in `CORS_ALLOWED_ORIGINS`.
+- Trusted hosts are restricted by `ALLOWED_HOSTS`.
+- Cookie-authenticated unsafe requests are protected by CSRF middleware.
+- Login, signup, and upload endpoints have Redis-backed per-IP rate limits.
+- HTTPS redirect middleware can be enabled outside local development with `APP_FORCE_HTTPS=true`.
+
 ### 5. Run with Docker Compose
 
 For local container-based testing:
@@ -172,10 +217,11 @@ Services:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8000`
+- Worker: separate background container, no public port
 
 Notes:
 
-- The backend container runs `migrate` on startup, then starts Django.
+- The backend container starts FastAPI with Uvicorn.
 - `DATABASE_URL` points from the backend container to the local Supabase Postgres port on the host.
 - Uploaded videos are stored in a Docker volume mounted at `/app/media`.
 - The frontend container runs the Vite dev server so UI behavior stays easy to test locally.
@@ -184,52 +230,49 @@ Notes:
 ## Development Commands
 
 - `npm run dev:web`: Start the React frontend on port `5173`
-- `npm run dev:api`: Start the Django backend on port `8000`
-- `npm run dev`: Run frontend and backend together
+- `npm run dev:api`: Start the FastAPI backend on port `8000`
+- `npm run dev:worker`: Start the worker scaffold locally
+- `npm run dev`: Run frontend, API, and worker together
+- `npm run dev:stack`: Start API, worker, and Redis together with Docker Compose
+- `npm run redis:start`: Start the local Redis container
+- `npm run redis:stop`: Stop the local Redis container
 - `npm run supabase:start`: Start the pruned local Supabase stack
 - `npm run supabase:stop`: Stop the local Supabase stack
 - `npm run supabase:status`: Show local Supabase service status
 - `npm run supabase:env`: Print local Supabase URLs and keys as env lines
 - `npm run lint`: Lint the frontend and shared TypeScript library
 - `npm run typecheck:web`: Typecheck the frontend
-- `npm run check:api`: Run Django system checks
+- `npm run check:api`: Import and validate the FastAPI application
 - `npm run test:web`: Run frontend tests with Vitest
-- `npm run test:api`: Run Django tests
-- `npm run test`: Run all configured tests through Nx
+- `npm run test:api`: Run FastAPI backend tests
+- `npm run test`: Run frontend and backend tests
 - `docker compose up --build`: Run frontend and backend in local containers
 
 ## API Endpoints
 
-- `POST /api/videos/upload/`
-- `GET /api/jobs/{job_id}/status/`
-- `GET /api/jobs/{job_id}/result/`
+- `POST /api/auth/signup/`
+- `POST /api/auth/login/`
+- `POST /api/auth/logout/`
+- `GET /api/auth/session/`
+- `POST /api/videos/upload/` (requires auth cookie)
+- `GET /api/jobs/{job_id}/status/` (requires auth cookie, owner only)
+- `GET /api/jobs/{job_id}/result/` (requires auth cookie, owner only)
 
 Detailed payload examples live in [docs/api-contract.md](/Users/sams/Desktop/video-caption-pipeline/docs/api-contract.md).
 
-## Pipeline Placeholder
+## API Structure
 
-The backend currently simulates these steps:
+The backend now lives under a layered structure in [apps/api/README.md](/Users/sams/Desktop/video-caption-pipeline/apps/api/README.md:1):
 
-1. `uploaded`
-2. `normalizing_video`
-3. `extracting_frames`
-4. `transcribing_audio`
-5. `describing_frames`
-6. `generating_neutral_summary`
-7. `generating_styled_captions`
-8. `completed`
+- middleware
+- endpoints
+- controllers
+- services
+- models
+- utils
+- tests
 
-Placeholder services live in:
-
-- `apps/api/pipeline/normalize_video.py`
-- `apps/api/pipeline/extract_frames.py`
-- `apps/api/pipeline/transcribe_audio.py`
-- `apps/api/pipeline/describe_frames.py`
-- `apps/api/pipeline/neutral_summary.py`
-- `apps/api/pipeline/styled_captions.py`
-- `apps/api/pipeline/run_pipeline.py`
-
-TODOs are marked where real Fireworks AI, Supabase Storage, and production-grade processing should be integrated.
+The processing flow now belongs under [apps/worker/README.md](/Users/sams/Desktop/video-caption-pipeline/apps/worker/README.md:1), not inside the API route layer.
 
 ## Supabase
 
@@ -247,5 +290,5 @@ Details live in [docs/supabase.md](/Users/sams/Desktop/video-caption-pipeline/do
 - Backend deployed as a cloud function/service
 - Terraform extended from the current scaffold in `infra/terraform`
 - CI expanded from `.github/workflows/ci.yml`
-- Replace the thread placeholder with a durable job system once the hackathon prototype proves the flow
+- Implement real job claiming and persistence inside `apps/worker`
 - Add production-oriented container images and image publishing once the target runtime is chosen

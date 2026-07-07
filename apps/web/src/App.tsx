@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import type { CaptionResultResponse, VideoJobStatusResponse } from '@shared-types';
 import { getJobResult, getJobStatus, uploadVideo } from './api';
+import { AuthContext } from './auth';
+import { AuthGate } from './components/AuthGate';
 import { JobStatusPage } from './pages/JobStatusPage';
 import { ResultPage } from './pages/ResultPage';
 import { UploadPage } from './pages/UploadPage';
@@ -13,6 +15,7 @@ type ViewState =
 const initialState: ViewState = { kind: 'upload' };
 
 export default function App() {
+  const { isReady, logout, user } = useContext(AuthContext);
   const [view, setView] = useState<ViewState>(initialState);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +25,19 @@ export default function App() {
   const activeJobId = view.kind === 'upload' ? null : view.jobId;
 
   useEffect(() => {
-    if (view.kind !== 'status') {
+    if (user) {
+      return;
+    }
+
+    setView(initialState);
+    setIsUploading(false);
+    setError(null);
+    setStatus(null);
+    setResult(null);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || view.kind !== 'status') {
       return;
     }
 
@@ -65,7 +80,22 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [view]);
+  }, [user, view]);
+
+  if (!isReady) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-card panel">
+          <div className="eyebrow">Session</div>
+          <h1>Checking authentication…</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return <AuthGate />;
+  }
 
   async function handleUpload(file: File) {
     setIsUploading(true);
@@ -97,7 +127,13 @@ export default function App() {
           <div className="eyebrow">Video Caption Pipeline</div>
           <h1>Hackathon-ready caption generation without the production complexity yet.</h1>
         </div>
-        {activeJobId ? <code className="job-chip">Job: {activeJobId}</code> : null}
+        <div className="hero-actions">
+          <code className="job-chip">{user.email ?? user.id}</code>
+          {activeJobId ? <code className="job-chip">Job: {activeJobId}</code> : null}
+          <button className="secondary-button" onClick={() => void logout()} type="button">
+            Log out
+          </button>
+        </div>
       </header>
 
       {view.kind === 'upload' ? (

@@ -11,6 +11,7 @@ __pycache__/
 *.pyc
 *.sqlite3
 apps/api/db.sqlite3
+apps/api/test_api.db
 apps/api/media/videos/*
 !apps/api/media/videos/.gitkeep
 .idea/

@@ -10,7 +10,7 @@ export function JobStatusPage({ status }: JobStatusPageProps) {
     <div className="page-shell">
       <StatusPanel status={status} />
       <aside className="info-card">
-        <div className="eyebrow">Pipeline Steps</div>
+        <div className="eyebrow">Worker Steps</div>
         <ol>
           <li>normalizing_video</li>
           <li>extracting_frames</li>

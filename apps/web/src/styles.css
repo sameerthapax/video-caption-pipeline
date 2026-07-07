@@ -40,9 +40,21 @@ input {
   padding: 48px 20px 64px;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  padding: 48px 20px 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 420px);
+  gap: 24px;
+  align-items: center;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
 .hero,
 .page-shell,
-.result-layout {
+.result-layout,
+.auth-hero {
   max-width: 1120px;
   margin: 0 auto;
 }
@@ -53,6 +65,14 @@ input {
   gap: 24px;
   align-items: flex-start;
   margin-bottom: 32px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  align-items: center;
 }
 
 .hero h1,
@@ -117,6 +137,44 @@ input {
   margin-top: 28px;
 }
 
+.auth-card {
+  width: min(100%, 420px);
+  justify-self: end;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(244, 239, 232, 0.62);
+}
+
+.text-input {
+  width: 100%;
+  border: 1px solid rgba(244, 239, 232, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(244, 239, 232, 0.94);
+  padding: 14px 16px;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
 .upload-input {
   display: grid;
   gap: 10px;
@@ -164,6 +222,10 @@ input {
 
 .error {
   color: var(--danger);
+}
+
+.success {
+  color: var(--success);
 }
 
 .job-chip {
@@ -277,12 +339,18 @@ input {
 @media (max-width: 900px) {
   .hero,
   .page-shell,
-  .caption-grid {
+  .caption-grid,
+  .auth-shell {
     grid-template-columns: 1fr;
   }
 
   .hero {
     flex-direction: column;
+  }
+
+  .auth-card {
+    width: 100%;
+    justify-self: stretch;
   }
 }
 
