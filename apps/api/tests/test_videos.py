@@ -178,11 +178,18 @@ def test_complete_upload_stream_marks_job_queued_and_streams_worker_events(clien
 
     async def fake_invoke_video_worker(job_id: str):
         yield WorkerProgressEvent(
-            event="worker_available",
+            event="claimed",
             job_id=job_id,
-            step="worker_available",
-            message="Worker saw queued job available.",
-            progress=40,
+            step="claimed",
+            message="Worker claimed the queued job.",
+            progress=5,
+        )
+        yield WorkerProgressEvent(
+            event="preprocessing_completed",
+            job_id=job_id,
+            step="preprocessing_completed",
+            message="Preprocessing completed.",
+            progress=95,
         )
 
     monkeypatch.setattr(video_service, "fetch_uploaded_object_metadata", fake_fetch_uploaded_object_metadata)
@@ -205,7 +212,8 @@ def test_complete_upload_stream_marks_job_queued_and_streams_worker_events(clien
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "event: queued" in response.text
     assert "event: worker_invoked" in response.text
-    assert "event: worker_available" in response.text
+    assert "event: claimed" in response.text
+    assert "event: preprocessing_completed" in response.text
 
     db = SessionLocal()
     refreshed_job = db.query(VideoJob).filter(VideoJob.id == job_id).one()

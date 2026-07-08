@@ -10,6 +10,13 @@
         "cwd": "apps/worker",
         "command": "python3 main.py"
       }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/worker",
+        "command": "pytest"
+      }
     }
   }
 }

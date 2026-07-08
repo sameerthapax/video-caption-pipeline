@@ -4,7 +4,13 @@ import logging
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from core.database import SessionLocal
+from services.events import WorkerProgressEvent, format_sse_event
+from services.processor import process_video_job
 
 logger = logging.getLogger("video-caption-pipeline.worker")
 
@@ -25,19 +31,20 @@ class WorkerInvokeResponse(BaseModel):
     step: str
     message: str
     progress: int | None = None
+    metadata: dict | None = None
 
 
-@app.post("/invoke/video-job", response_model=WorkerInvokeResponse)
-async def invoke_video_job(payload: WorkerInvokeRequest) -> WorkerInvokeResponse:
-    logger.info("Worker received job %s", payload.job_id)
-    logger.info("Worker sees queued job %s as available", payload.job_id)
-    return WorkerInvokeResponse(
-        event="worker_available",
-        job_id=payload.job_id,
-        step="worker_available",
-        message=f"Worker sees queued job {payload.job_id} as available.",
-        progress=15,
-    )
+@app.post("/invoke/video-job")
+async def invoke_video_job(payload: WorkerInvokeRequest) -> StreamingResponse:
+    def event_stream() -> iter[str]:
+        db: Session = SessionLocal()
+        try:
+            for event in process_video_job(db=db, job_id=payload.job_id):
+                yield format_sse_event(event)
+        finally:
+            db.close()
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 def main() -> None:

@@ -4,7 +4,7 @@ values (
   'videos',
   false,
   52428800,
-  array['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska']
+  array['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska', 'audio/wav', 'audio/x-wav', 'application/octet-stream']
 )
 on conflict (id) do update
 set

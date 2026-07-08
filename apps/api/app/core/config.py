@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
     supabase_anon_key: str | None = Field(default=None, alias="SUPABASE_ANON_KEY")
     supabase_service_role_key: str | None = Field(default=None, alias="SUPABASE_SERVICE_ROLE_KEY")
-    supabase_storage_bucket: str = Field(default="videos", alias="SUPABASE_STORAGE_BUCKET")
+    supabase_storage_bucket: str = Field(
+        default="videos",
+        validation_alias=AliasChoices("SUPABASE_STORAGE_BUCKET", "SUPABASE_VIDEO_BUCKET"),
+    )
     worker_invoke_url: str = Field(
         default="http://127.0.0.1:8001/invoke/video-job",
         alias="WORKER_INVOKE_URL",
