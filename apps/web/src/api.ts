@@ -6,7 +6,7 @@ import type {
   VideoJobStatusResponse,
 } from '@shared-types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE_URL = resolveApiBaseUrl();
 const CSRF_COOKIE = 'vp_csrf_token';
 const CSRF_HEADER = 'X-CSRF-Token';
 
@@ -84,6 +84,22 @@ type CaptionResultResponseApi = {
   raw_output_json: Record<string, unknown>;
   created_at: string;
 };
+
+function resolveApiBaseUrl(): string {
+  const configuredUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
+  }
+
+  throw new Error('VITE_API_BASE_URL is required for non-local environments.');
+}
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
