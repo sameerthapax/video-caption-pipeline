@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { AuthContext } from './auth';
 import App from './App';
 
@@ -17,9 +18,11 @@ describe('App', () => {
           logout: async () => undefined
         }}
       >
-        <App />
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
       </AuthContext.Provider>
     );
-    expect(screen.getByText(/upload a clip/i)).toBeInTheDocument();
+    expect(screen.getByText(/track uploads, worker progress/i)).toBeInTheDocument();
   });
 });

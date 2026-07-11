@@ -1,0 +1,63 @@
+name: Worker Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/worker/**"
+      - "infra/aws/ecr.tf"
+      - "infra/aws/lambda_worker.tf"
+      - ".github/workflows/worker-image.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: worker-image-development
+  cancel-in-progress: false
+
+jobs:
+  build-push:
+    name: Build and Push Worker Image
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        env:
+          ECR_REPOSITORY_URL: ${{ vars.WORKER_ECR_REPOSITORY_URL }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: docker build -f apps/worker/Dockerfile.lambda -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" .
+
+      - name: Push image
+        env:
+          ECR_REPOSITORY_URL: ${{ vars.WORKER_ECR_REPOSITORY_URL }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
+
+      - name: Update Lambda image when function exists
+        env:
+          ECR_REPOSITORY_URL: ${{ vars.WORKER_ECR_REPOSITORY_URL }}
+          IMAGE_TAG: ${{ github.sha }}
+          WORKER_LAMBDA_NAME: ${{ vars.WORKER_LAMBDA_NAME }}
+        run: |
+          if [ -z "$WORKER_LAMBDA_NAME" ]; then
+            echo "WORKER_LAMBDA_NAME is not set; push completed. Set worker_image_uri in Terraform for the first Lambda deployment."
+            exit 0
+          fi
+          aws lambda update-function-code \
+            --function-name "$WORKER_LAMBDA_NAME" \
+            --image-uri "$ECR_REPOSITORY_URL:$IMAGE_TAG"

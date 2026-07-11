@@ -1,8 +1,9 @@
 import type {
+  AuthProfileResponse,
   CaptionResultResponse,
+  JobListItemResponse,
   UploadPreparationResponse,
-  UploadResponse,
-  VideoJobStatusResponse
+  VideoJobStatusResponse,
 } from '@shared-types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
@@ -18,9 +19,13 @@ type AuthSessionResponseApi = {
   user: AuthUser;
 };
 
-type UploadResponseApi = {
-  job_id: string;
-  status: UploadResponse['status'];
+type AuthProfileResponseApi = {
+  user: AuthUser;
+  total_jobs: number;
+  completed_jobs: number;
+  failed_jobs: number;
+  active_jobs: number;
+  latest_job_at: string | null;
 };
 
 type UploadPreparationRequestApi = {
@@ -29,7 +34,9 @@ type UploadPreparationRequestApi = {
   file_size: number;
 };
 
-type UploadPreparationResponseApi = UploadResponseApi & {
+type UploadPreparationResponseApi = {
+  job_id: string;
+  status: UploadPreparationResponse['status'];
   bucket: string;
   object_path: string;
   upload_url: string;
@@ -63,6 +70,10 @@ type VideoJobStatusResponseApi = {
   updated_at: string;
 };
 
+type JobListItemResponseApi = VideoJobStatusResponseApi & {
+  has_result: boolean;
+};
+
 type CaptionResultResponseApi = {
   job_id: string;
   neutral_summary: string;
@@ -78,7 +89,10 @@ async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
-      const payload = (await response.json()) as { detail?: string | { msg?: string }[]; errors?: { msg?: string }[] };
+      const payload = (await response.json()) as {
+        detail?: string | { msg?: string }[];
+        errors?: { msg?: string }[];
+      };
       const detail =
         typeof payload.detail === 'string'
           ? payload.detail
@@ -114,7 +128,7 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     ...init,
-    headers
+    headers,
   });
 }
 
@@ -138,9 +152,9 @@ export async function signup(email: string, password: string): Promise<AuthUser>
   const response = await apiFetch('/api/auth/signup/', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ email, password }),
   });
   const payload = await parseResponse<AuthSessionResponseApi>(response);
   return payload.user;
@@ -150,9 +164,9 @@ export async function login(email: string, password: string): Promise<AuthUser> 
   const response = await apiFetch('/api/auth/login/', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ email, password }),
   });
   const payload = await parseResponse<AuthSessionResponseApi>(response);
   return payload.user;
@@ -160,7 +174,7 @@ export async function login(email: string, password: string): Promise<AuthUser> 
 
 export async function logout(): Promise<void> {
   const response = await apiFetch('/api/auth/logout/', {
-    method: 'POST'
+    method: 'POST',
   });
   await parseResponse<void>(response);
 }
@@ -169,6 +183,46 @@ export async function getSession(): Promise<AuthUser> {
   const response = await apiFetch('/api/auth/session/');
   const payload = await parseResponse<AuthSessionResponseApi>(response);
   return payload.user;
+}
+
+export async function getProfile(): Promise<AuthProfileResponse> {
+  const response = await apiFetch('/api/auth/profile/');
+  const payload = await parseResponse<AuthProfileResponseApi>(response);
+  return {
+    user: payload.user,
+    totalJobs: payload.total_jobs,
+    completedJobs: payload.completed_jobs,
+    failedJobs: payload.failed_jobs,
+    activeJobs: payload.active_jobs,
+    latestJobAt: payload.latest_job_at,
+  };
+}
+
+export async function listJobs(): Promise<JobListItemResponse[]> {
+  const response = await apiFetch('/api/jobs/');
+  const payload = await parseResponse<JobListItemResponseApi[]>(response);
+  return payload.map(mapJobListItemResponse);
+}
+
+export async function getJobStatus(jobId: string): Promise<VideoJobStatusResponse> {
+  const response = await apiFetch(`/api/jobs/${jobId}/status/`);
+  const payload = await parseResponse<VideoJobStatusResponseApi>(response);
+  return mapVideoJobStatusResponse(payload);
+}
+
+export async function getJobResult(jobId: string): Promise<CaptionResultResponse> {
+  const response = await apiFetch(`/api/jobs/${jobId}/result/`);
+  const payload = await parseResponse<CaptionResultResponseApi>(response);
+  return {
+    jobId: payload.job_id,
+    neutralSummary: payload.neutral_summary,
+    formalCaption: payload.formal_caption,
+    sarcasticCaption: payload.sarcastic_caption,
+    humorousTechCaption: payload.humorous_tech_caption,
+    humorousNonTechCaption: payload.humorous_non_tech_caption,
+    rawOutputJson: payload.raw_output_json,
+    createdAt: payload.created_at,
+  };
 }
 
 export async function uploadVideo(
@@ -187,13 +241,13 @@ async function prepareVideoUpload(file: File): Promise<UploadPreparationResponse
   const response = await apiFetch('/api/videos/upload/', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       filename: file.name,
       content_type: contentType,
-      file_size: file.size
-    } satisfies UploadPreparationRequestApi)
+      file_size: file.size,
+    } satisfies UploadPreparationRequestApi),
   });
 
   const payload = await parseResponse<UploadPreparationResponseApi>(response);
@@ -204,7 +258,7 @@ async function prepareVideoUpload(file: File): Promise<UploadPreparationResponse
     objectPath: payload.object_path,
     uploadUrl: payload.upload_url,
     uploadMethod: payload.upload_method,
-    uploadHeaders: payload.upload_headers
+    uploadHeaders: payload.upload_headers,
   };
 }
 
@@ -255,14 +309,14 @@ async function completeVideoUploadStream(
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       job_id: preparation.jobId,
       object_path: preparation.objectPath,
       file_size: file.size,
-      content_type: file.type || inferVideoContentType(file.name)
-    } satisfies UploadCompletionRequestApi)
+      content_type: file.type || inferVideoContentType(file.name),
+    } satisfies UploadCompletionRequestApi),
   });
 
   if (!response.ok) {
@@ -291,7 +345,7 @@ async function completeVideoUploadStream(
       jobId: payload.job_id,
       step: payload.step,
       message: payload.message,
-      progress: payload.progress
+      progress: payload.progress,
     });
 
     if (payload.event === 'failed') {
@@ -393,9 +447,7 @@ function parseSseChunk(chunk: string): { event: string; data: string } | null {
   return dataLines.length > 0 ? { event, data: dataLines.join('\n') } : null;
 }
 
-export async function getJobStatus(jobId: string): Promise<VideoJobStatusResponse> {
-  const response = await apiFetch(`/api/jobs/${jobId}/status/`);
-  const payload = await parseResponse<VideoJobStatusResponseApi>(response);
+function mapVideoJobStatusResponse(payload: VideoJobStatusResponseApi): VideoJobStatusResponse {
   return {
     id: payload.id,
     status: payload.status,
@@ -404,21 +456,13 @@ export async function getJobStatus(jobId: string): Promise<VideoJobStatusRespons
     errorMessage: payload.error_message,
     originalFilename: payload.original_filename,
     createdAt: payload.created_at,
-    updatedAt: payload.updated_at
+    updatedAt: payload.updated_at,
   };
 }
 
-export async function getJobResult(jobId: string): Promise<CaptionResultResponse> {
-  const response = await apiFetch(`/api/jobs/${jobId}/result/`);
-  const payload = await parseResponse<CaptionResultResponseApi>(response);
+function mapJobListItemResponse(payload: JobListItemResponseApi): JobListItemResponse {
   return {
-    jobId: payload.job_id,
-    neutralSummary: payload.neutral_summary,
-    formalCaption: payload.formal_caption,
-    sarcasticCaption: payload.sarcastic_caption,
-    humorousTechCaption: payload.humorous_tech_caption,
-    humorousNonTechCaption: payload.humorous_non_tech_caption,
-    rawOutputJson: payload.raw_output_json,
-    createdAt: payload.created_at
+    ...mapVideoJobStatusResponse(payload),
+    hasResult: payload.has_result,
   };
 }

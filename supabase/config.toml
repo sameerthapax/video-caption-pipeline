@@ -108,8 +108,9 @@ file_size_limit = "50MiB"
 [storage.buckets.videos]
 public = false
 file_size_limit = "50MiB"
-allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm", "video/x-matroska", "audio/wav", "audio/x-wav", "application/octet-stream"]
-objects_path = "./videos"
+allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm", "video/x-matroska", "audio/wav", "audio/x-wav", "image/jpeg", "application/json", "application/octet-stream"]
+# No local seed objects are required for this bucket. The bucket itself is
+# created and configured by SQL migrations.
 
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]

@@ -20,6 +20,20 @@ class VideoJobStatusResponse(BaseModel):
     updated_at: datetime
 
 
+class JobListItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    status: VideoJobStatus
+    current_step: str
+    progress: int
+    error_message: str
+    original_filename: str
+    created_at: datetime
+    updated_at: datetime
+    has_result: bool
+
+
 class CaptionResultResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,12 +1,20 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.controllers.job_controller import get_job_result, get_job_status
+from app.controllers.job_controller import get_job_result, get_job_status, list_jobs
 from app.core.auth import AuthenticatedUser, get_current_user
 from app.core.database import get_db
-from app.schemas.job import CaptionResultResponse, VideoJobStatusResponse
+from app.schemas.job import CaptionResultResponse, JobListItemResponse, VideoJobStatusResponse
 
 router = APIRouter()
+
+
+@router.get("/", response_model=list[JobListItemResponse])
+def list_jobs_endpoint(
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_current_user),
+) -> list[JobListItemResponse]:
+    return list_jobs(db=db, user=user)
 
 
 @router.get("/{job_id}/status/", response_model=VideoJobStatusResponse)

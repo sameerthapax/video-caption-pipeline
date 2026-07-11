@@ -28,6 +28,18 @@ export interface VideoJobStatusResponse {
   updatedAt: string;
 }
 
+export interface JobListItemResponse {
+  id: string;
+  status: VideoJobStatus;
+  currentStep: string;
+  progress: number;
+  errorMessage: string;
+  originalFilename: string;
+  createdAt: string;
+  updatedAt: string;
+  hasResult: boolean;
+}
+
 export interface CaptionResultResponse {
   jobId: string;
   neutralSummary: string;
@@ -37,4 +49,16 @@ export interface CaptionResultResponse {
   humorousNonTechCaption: string;
   rawOutputJson: Record<string, unknown>;
   createdAt: string;
+}
+
+export interface AuthProfileResponse {
+  user: {
+    id: string;
+    email: string | null;
+  };
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  activeJobs: number;
+  latestJobAt: string | null;
 }

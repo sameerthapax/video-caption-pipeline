@@ -221,6 +221,8 @@ def ensure_storage_bucket_configuration() -> None:
                     "video/x-matroska",
                     "audio/wav",
                     "audio/x-wav",
+                    "image/jpeg",
+                    "application/json",
                     "application/octet-stream",
                 ],
             },
