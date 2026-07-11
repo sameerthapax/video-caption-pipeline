@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "infra/aws/**"
+      - ".github/workflows/terraform-plan.yml"
+      - ".github/workflows/terraform-apply.yml"
 
 permissions:
   id-token: write

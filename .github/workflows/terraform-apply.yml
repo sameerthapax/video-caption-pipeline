@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "infra/aws/**"
+      - ".github/workflows/terraform-plan.yml"
+      - ".github/workflows/terraform-apply.yml"
   workflow_dispatch:
 
 permissions:
