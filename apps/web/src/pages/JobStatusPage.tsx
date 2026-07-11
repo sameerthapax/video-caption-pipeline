@@ -7,7 +7,7 @@ import { BackButton } from '../components/BackButton';
 import { JobStatusBadge } from '../components/JobStatusBadge';
 
 const POLL_INTERVAL_MS = 2000;
-
+//
 export function JobStatusPage() {
   const { jobId } = useParams();
   const currentJobId = jobId ?? '';
