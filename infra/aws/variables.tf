@@ -130,9 +130,9 @@ variable "worker_ephemeral_storage_mb" {
 }
 
 variable "worker_reserved_concurrency" {
-  description = "Reserved concurrency cap for the worker Lambda. Use a low value in dev to prevent cost spikes."
+  description = "Reserved concurrency cap for the worker Lambda. Set to null to leave concurrency unreserved when the AWS account limit is too low."
   type        = number
-  default     = 2
+  default     = null
 }
 
 variable "queue_max_receive_count" {
