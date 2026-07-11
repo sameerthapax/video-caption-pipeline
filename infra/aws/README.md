@@ -148,7 +148,7 @@ npm run aws-tf-destroy
 
 ## Cost Warnings
 
-- Keep `worker_reserved_concurrency` low in development.
+- Keep `worker_reserved_concurrency` low in development, or leave it unset if your AWS account has a very small concurrency quota.
 - The default log retention is 7 days.
 - DynamoDB uses on-demand billing.
 - The optional budget is enabled only when `budget_email` is set.

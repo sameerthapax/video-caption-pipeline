@@ -22,7 +22,7 @@ resource "aws_amplify_app" "frontend" {
           }
         }
         artifacts = {
-          baseDirectory = local.frontend_output_dir
+          baseDirectory = "../../${local.frontend_output_dir}"
           files         = ["**/*"]
         }
         cache = {
@@ -31,6 +31,10 @@ resource "aws_amplify_app" "frontend" {
       }
     }]
   })
+
+  lifecycle {
+    ignore_changes = [access_token]
+  }
 }
 
 resource "aws_amplify_branch" "main" {

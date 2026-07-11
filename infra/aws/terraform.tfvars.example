@@ -6,7 +6,8 @@ github_repository = "video-caption-pipeline"
 github_branch     = "main"
 
 allowed_frontend_origins = [
-  "http://localhost:5173"
+  "http://localhost:5173",
+  "https://main.d2w3c1ltsxdtvd.amplifyapp.com"
 ]
 
 source_video_retention_days = 3
@@ -24,6 +25,9 @@ openai_final_caption_model = "gpt-5.5"
 
 # Set after pushing the first immutable ECR image.
 # worker_image_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/video-caption-pipeline-dev-worker:<git-sha>"
+
+# Set to a small number to cap spend, or leave null to avoid account-level reserved concurrency limits.
+# worker_reserved_concurrency = 2
 
 # budget_email = "you@example.com"
 budget_monthly_limit_usd = 10
