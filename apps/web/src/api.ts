@@ -409,16 +409,6 @@ function inferVideoContentType(filename: string): string {
   }
 }
 
-async function buildResponseError(response: Response): Promise<Error> {
-  try {
-    await parseResponse(response);
-  } catch (error) {
-    return error instanceof Error ? error : new Error('Request failed.');
-  }
-
-  return new Error(`Request failed with status ${response.status}`);
-}
-
 function mapLambdaJobStatusResponse(payload: Record<string, unknown>): VideoJobStatusResponse {
   return {
     id: String(payload.job_id ?? ''),
