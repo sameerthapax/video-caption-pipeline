@@ -100,6 +100,7 @@ jobs:
     env:
       TF_VAR_github_access_token: ${{ secrets.TF_VAR_GITHUB_ACCESS_TOKEN }}
       TF_VAR_worker_image_uri: ${{ vars.TF_VAR_WORKER_IMAGE_URI }}
+      TF_VAR_allowed_frontend_origins: ${{ vars.TF_VAR_ALLOWED_FRONTEND_ORIGINS }}
 
     defaults:
       run:
