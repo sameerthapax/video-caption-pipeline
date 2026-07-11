@@ -9,6 +9,7 @@ import type {
 const API_BASE_URL = resolveApiBaseUrl();
 const CSRF_COOKIE = 'vp_csrf_token';
 const CSRF_HEADER = 'X-CSRF-Token';
+const AUTH_DISABLED = resolveAuthDisabled();
 
 export type AuthUser = {
   id: string;
@@ -31,23 +32,21 @@ type AuthProfileResponseApi = {
 type UploadPreparationRequestApi = {
   filename: string;
   content_type: string;
-  file_size: number;
 };
 
 type UploadPreparationResponseApi = {
   job_id: string;
-  status: UploadPreparationResponse['status'];
   bucket: string;
-  object_path: string;
+  object_key: string;
   upload_url: string;
-  upload_method: 'PUT';
-  upload_headers: Record<string, string>;
+  expires_in: number;
+  headers: Record<string, string>;
 };
 
 type UploadCompletionRequestApi = {
   job_id: string;
-  object_path: string;
-  file_size: number;
+  source_key: string;
+  filename: string;
   content_type: string;
 };
 
@@ -99,6 +98,20 @@ function resolveApiBaseUrl(): string {
   }
 
   throw new Error('VITE_API_BASE_URL is required for non-local environments.');
+}
+
+function resolveAuthDisabled(): boolean {
+  const configuredValue = import.meta.env.VITE_DISABLE_AUTH?.trim().toLowerCase();
+  if (configuredValue) {
+    return configuredValue === 'true';
+  }
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    return hostname !== 'localhost' && hostname !== '127.0.0.1';
+  }
+
+  return false;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -165,6 +178,9 @@ function getCookieValue(name: string): string | null {
 }
 
 export async function signup(email: string, password: string): Promise<AuthUser> {
+  if (AUTH_DISABLED) {
+    return { id: 'guest', email: 'guest@example.com' };
+  }
   const response = await apiFetch('/api/auth/signup/', {
     method: 'POST',
     headers: {
@@ -177,6 +193,9 @@ export async function signup(email: string, password: string): Promise<AuthUser>
 }
 
 export async function login(email: string, password: string): Promise<AuthUser> {
+  if (AUTH_DISABLED) {
+    return { id: 'guest', email: 'guest@example.com' };
+  }
   const response = await apiFetch('/api/auth/login/', {
     method: 'POST',
     headers: {
@@ -189,6 +208,9 @@ export async function login(email: string, password: string): Promise<AuthUser> 
 }
 
 export async function logout(): Promise<void> {
+  if (AUTH_DISABLED) {
+    return;
+  }
   const response = await apiFetch('/api/auth/logout/', {
     method: 'POST',
   });
@@ -196,12 +218,25 @@ export async function logout(): Promise<void> {
 }
 
 export async function getSession(): Promise<AuthUser> {
+  if (AUTH_DISABLED) {
+    return { id: 'guest', email: 'guest@example.com' };
+  }
   const response = await apiFetch('/api/auth/session/');
   const payload = await parseResponse<AuthSessionResponseApi>(response);
   return payload.user;
 }
 
 export async function getProfile(): Promise<AuthProfileResponse> {
+  if (AUTH_DISABLED) {
+    return {
+      user: { id: 'guest', email: null },
+      totalJobs: 0,
+      completedJobs: 0,
+      failedJobs: 0,
+      activeJobs: 0,
+      latestJobAt: null,
+    };
+  }
   const response = await apiFetch('/api/auth/profile/');
   const payload = await parseResponse<AuthProfileResponseApi>(response);
   return {
@@ -215,29 +250,35 @@ export async function getProfile(): Promise<AuthProfileResponse> {
 }
 
 export async function listJobs(): Promise<JobListItemResponse[]> {
+  if (AUTH_DISABLED) {
+    return [];
+  }
   const response = await apiFetch('/api/jobs/');
   const payload = await parseResponse<JobListItemResponseApi[]>(response);
   return payload.map(mapJobListItemResponse);
 }
 
 export async function getJobStatus(jobId: string): Promise<VideoJobStatusResponse> {
-  const response = await apiFetch(`/api/jobs/${jobId}/status/`);
-  const payload = await parseResponse<VideoJobStatusResponseApi>(response);
-  return mapVideoJobStatusResponse(payload);
+  const response = await apiFetch(`/jobs/${jobId}`);
+  const payload = await parseResponse<Record<string, unknown>>(response);
+  return mapLambdaJobStatusResponse(payload);
 }
 
 export async function getJobResult(jobId: string): Promise<CaptionResultResponse> {
-  const response = await apiFetch(`/api/jobs/${jobId}/result/`);
-  const payload = await parseResponse<CaptionResultResponseApi>(response);
+  const response = await apiFetch(`/jobs/${jobId}/result`);
+  const payload = await parseResponse<{ result?: CaptionResultResponseApi; status?: string }>(response);
+  if (!payload.result) {
+    throw new Error(payload.status === 'completed' ? 'Result payload missing.' : 'Result is not ready yet.');
+  }
   return {
-    jobId: payload.job_id,
-    neutralSummary: payload.neutral_summary,
-    formalCaption: payload.formal_caption,
-    sarcasticCaption: payload.sarcastic_caption,
-    humorousTechCaption: payload.humorous_tech_caption,
-    humorousNonTechCaption: payload.humorous_non_tech_caption,
-    rawOutputJson: payload.raw_output_json,
-    createdAt: payload.created_at,
+    jobId: payload.result.job_id,
+    neutralSummary: payload.result.neutral_summary,
+    formalCaption: payload.result.formal_caption,
+    sarcasticCaption: payload.result.sarcastic_caption,
+    humorousTechCaption: payload.result.humorous_tech_caption,
+    humorousNonTechCaption: payload.result.humorous_non_tech_caption,
+    rawOutputJson: payload.result.raw_output_json,
+    createdAt: payload.result.created_at,
   };
 }
 
@@ -254,7 +295,7 @@ export async function uploadVideo(
 
 async function prepareVideoUpload(file: File): Promise<UploadPreparationResponse> {
   const contentType = file.type || inferVideoContentType(file.name);
-  const response = await apiFetch('/api/videos/upload/', {
+  const response = await apiFetch('/uploads/presign', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -262,19 +303,18 @@ async function prepareVideoUpload(file: File): Promise<UploadPreparationResponse
     body: JSON.stringify({
       filename: file.name,
       content_type: contentType,
-      file_size: file.size,
     } satisfies UploadPreparationRequestApi),
   });
 
   const payload = await parseResponse<UploadPreparationResponseApi>(response);
   return {
     jobId: payload.job_id,
-    status: payload.status,
+    status: 'queued',
     bucket: payload.bucket,
-    objectPath: payload.object_path,
+    objectPath: payload.object_key,
     uploadUrl: payload.upload_url,
-    uploadMethod: payload.upload_method,
-    uploadHeaders: payload.upload_headers,
+    uploadMethod: 'PUT',
+    uploadHeaders: payload.headers,
   };
 }
 
@@ -321,52 +361,33 @@ async function completeVideoUploadStream(
   file: File,
   onStreamEvent?: (event: UploadStreamEvent) => void
 ): Promise<void> {
-  const response = await apiFetch('/api/videos/upload/complete/stream', {
+  onStreamEvent?.({
+    event: 'queued',
+    jobId: preparation.jobId,
+    step: 'registering',
+    message: 'Registering uploaded file and queueing the worker job.',
+    progress: 100,
+  });
+
+  const response = await apiFetch('/jobs', {
     method: 'POST',
     headers: {
-      Accept: 'text/event-stream',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       job_id: preparation.jobId,
-      object_path: preparation.objectPath,
-      file_size: file.size,
+      source_key: preparation.objectPath,
+      filename: file.name,
       content_type: file.type || inferVideoContentType(file.name),
     } satisfies UploadCompletionRequestApi),
   });
-
-  if (!response.ok) {
-    throw await buildResponseError(response);
-  }
-
-  if (!response.body) {
-    throw new Error('Streaming upload completion response did not include a body.');
-  }
-
-  await readEventStream(response, (rawEvent) => {
-    if (!rawEvent.data) {
-      return;
-    }
-
-    const payload = JSON.parse(rawEvent.data) as {
-      event: string;
-      job_id: string;
-      step: string;
-      message: string;
-      progress?: number;
-    };
-
-    onStreamEvent?.({
-      event: payload.event,
-      jobId: payload.job_id,
-      step: payload.step,
-      message: payload.message,
-      progress: payload.progress,
-    });
-
-    if (payload.event === 'failed') {
-      throw new Error(payload.message || 'Upload completion stream failed.');
-    }
+  await parseResponse<Record<string, unknown>>(response);
+  onStreamEvent?.({
+    event: 'queued',
+    jobId: preparation.jobId,
+    step: 'queued',
+    message: 'Upload registered. Worker job queued successfully.',
+    progress: 100,
   });
 }
 
@@ -398,69 +419,32 @@ async function buildResponseError(response: Response): Promise<Error> {
   return new Error(`Request failed with status ${response.status}`);
 }
 
-async function readEventStream(
-  response: Response,
-  onEvent: (event: { event: string; data: string }) => void
-): Promise<void> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error('Streaming response body could not be read.');
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-
-    let boundaryMatch = buffer.match(/\r?\n\r?\n/);
-    while (boundaryMatch?.index !== undefined) {
-      const boundaryLength = boundaryMatch[0].length;
-      const rawChunk = buffer.slice(0, boundaryMatch.index);
-      buffer = buffer.slice(boundaryMatch.index + boundaryLength);
-      const parsedEvent = parseSseChunk(rawChunk);
-      if (parsedEvent) {
-        onEvent(parsedEvent);
-      }
-      boundaryMatch = buffer.match(/\r?\n\r?\n/);
-    }
-
-    if (done) {
-      const trailingEvent = parseSseChunk(buffer);
-      if (trailingEvent) {
-        onEvent(trailingEvent);
-      }
-      return;
-    }
-  }
+function mapLambdaJobStatusResponse(payload: Record<string, unknown>): VideoJobStatusResponse {
+  return {
+    id: String(payload.job_id ?? ''),
+    status: mapLambdaStatus(payload.status),
+    currentStep: String(payload.current_step ?? payload.status ?? 'queued'),
+    progress: Number(payload.progress ?? 0),
+    errorMessage: String(payload.error_message ?? ''),
+    originalFilename: String(payload.original_filename ?? 'Uploaded video'),
+    createdAt: String(payload.created_at ?? new Date().toISOString()),
+    updatedAt: String(payload.updated_at ?? payload.created_at ?? new Date().toISOString()),
+  };
 }
 
-function parseSseChunk(chunk: string): { event: string; data: string } | null {
-  const lines = chunk
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.length > 0 && !line.startsWith(':'));
-
-  if (lines.length === 0) {
-    return null;
+function mapLambdaStatus(value: unknown): VideoJobStatusResponse['status'] {
+  const status = String(value ?? 'queued');
+  if (
+    status === 'pending_upload' ||
+    status === 'uploaded' ||
+    status === 'queued' ||
+    status === 'processing' ||
+    status === 'completed' ||
+    status === 'failed'
+  ) {
+    return status;
   }
-
-  let event = 'message';
-  const dataLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith('event:')) {
-      event = line.slice('event:'.length).trim();
-      continue;
-    }
-
-    if (line.startsWith('data:')) {
-      dataLines.push(line.slice('data:'.length).trim());
-    }
-  }
-
-  return dataLines.length > 0 ? { event, data: dataLines.join('\n') } : null;
+  return 'queued';
 }
 
 function mapVideoJobStatusResponse(payload: VideoJobStatusResponseApi): VideoJobStatusResponse {

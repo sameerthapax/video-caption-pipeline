@@ -5,6 +5,8 @@ import { getSession, login, logout, signup } from './api';
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'scroll', 'focus'] as const;
+export const AUTH_DISABLED = resolveAuthDisabled();
+const GUEST_USER: AuthUser = { id: 'guest', email: null };
 
 type AuthContextValue = {
   isReady: boolean;
@@ -23,8 +25,8 @@ export const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(AUTH_DISABLED ? GUEST_USER : null);
+  const [isReady, setIsReady] = useState(AUTH_DISABLED);
   const timerRef = useRef<number | null>(null);
 
   function clearInactivityTimer() {
@@ -46,6 +48,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function hydrateSession() {
+    if (AUTH_DISABLED) {
+      setUser(GUEST_USER);
+      setIsReady(true);
+      return;
+    }
     try {
       const nextUser = await getSession();
       setUser(nextUser);
@@ -59,18 +66,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function handleLogin(email: string, password: string) {
+    if (AUTH_DISABLED) {
+      setUser(GUEST_USER);
+      setIsReady(true);
+      return;
+    }
     const nextUser = await login(email, password);
     setUser(nextUser);
     resetInactivityTimer(nextUser);
   }
 
   async function handleSignup(email: string, password: string) {
+    if (AUTH_DISABLED) {
+      setUser(GUEST_USER);
+      setIsReady(true);
+      return;
+    }
     const nextUser = await signup(email, password);
     setUser(nextUser);
     resetInactivityTimer(nextUser);
   }
 
   async function handleLogout() {
+    if (AUTH_DISABLED) {
+      return;
+    }
     await logout();
     setUser(null);
     clearInactivityTimer();
@@ -113,4 +133,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+function resolveAuthDisabled(): boolean {
+  const configuredValue = import.meta.env.VITE_DISABLE_AUTH?.trim().toLowerCase();
+  if (configuredValue) {
+    return configuredValue === 'true';
+  }
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    return hostname !== 'localhost' && hostname !== '127.0.0.1';
+  }
+
+  return false;
 }

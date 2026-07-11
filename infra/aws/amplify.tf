@@ -6,6 +6,7 @@ resource "aws_amplify_app" "frontend" {
 
   environment_variables = {
     VITE_API_BASE_URL = aws_apigatewayv2_stage.default.invoke_url
+    VITE_DISABLE_AUTH = "true"
   }
 
   build_spec = <<-EOT
