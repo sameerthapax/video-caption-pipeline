@@ -14,6 +14,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  actions: write
 
 concurrency:
   group: worker-image-development
@@ -24,6 +25,9 @@ jobs:
     name: Build and Push Worker Image
     runs-on: ubuntu-latest
     environment: development
+    env:
+      ECR_REPOSITORY_URL: ${{ vars.WORKER_ECR_REPOSITORY_URL }}
+      IMAGE_TAG: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,21 +41,18 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build image
-        env:
-          ECR_REPOSITORY_URL: ${{ vars.WORKER_ECR_REPOSITORY_URL }}
-          IMAGE_TAG: ${{ github.sha }}
         run: docker build -f apps/worker/Dockerfile.lambda -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" .
 
       - name: Push image
-        env:
-          ECR_REPOSITORY_URL: ${{ vars.WORKER_ECR_REPOSITORY_URL }}
-          IMAGE_TAG: ${{ github.sha }}
         run: docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
+
+      - name: Persist worker image URI for Terraform
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh variable set TF_VAR_WORKER_IMAGE_URI --env development --body "$ECR_REPOSITORY_URL:$IMAGE_TAG"
 
       - name: Update Lambda image when function exists
         env:
-          ECR_REPOSITORY_URL: ${{ vars.WORKER_ECR_REPOSITORY_URL }}
-          IMAGE_TAG: ${{ github.sha }}
           WORKER_LAMBDA_NAME: ${{ vars.WORKER_LAMBDA_NAME }}
         run: |
           if [ -z "$WORKER_LAMBDA_NAME" ]; then

@@ -112,6 +112,11 @@ def select_scene_change_indices(
 ) -> list[int]:
     peaks = _find_local_peaks(scores)
     ranked = sorted(peaks, key=lambda index: scores[index], reverse=True)
+    ranked.extend(
+        index
+        for index in sorted(range(len(scores)), key=lambda candidate_index: scores[candidate_index], reverse=True)
+        if index not in peaks
+    )
     selected: list[int] = []
     for index in ranked:
         if all(abs(timestamps[index] - timestamps[chosen]) >= min_spacing_seconds for chosen in selected):
@@ -192,4 +197,3 @@ def _find_local_peaks(scores: list[float]) -> list[int]:
         if score > 0 and score >= previous_score and score >= next_score:
             peaks.append(index)
     return peaks
-
