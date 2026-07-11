@@ -5,7 +5,7 @@ resource "aws_amplify_app" "frontend" {
   access_token = var.github_access_token
 
   environment_variables = {
-    VITE_API_URL = aws_apigatewayv2_stage.default.invoke_url
+    VITE_API_BASE_URL = aws_apigatewayv2_stage.default.invoke_url
   }
 
   build_spec = <<-EOT
