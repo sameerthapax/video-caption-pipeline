@@ -18,7 +18,7 @@ from pipeline.run_vlm_stage import run_vlm_reasoning_stage
 from pipeline.style import style_captions
 from services.openai_responses_client import OpenAIResponsesClient, OpenAIResponsesConfig
 from services.process import ProcessExecutionError, probe_media, run_command
-
+//
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from app.core.database import SessionLocal
 from app.core.auth import ACCESS_TOKEN_COOKIE, CSRF_COOKIE, CSRF_HEADER, REFRESH_TOKEN_COOKIE
 from app.models.job import VideoJob
-
+//
 
 def test_signup_sets_auth_cookies(client, monkeypatch):
     def fake_sign_up_with_password(*, email: str, password: str):
