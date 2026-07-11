@@ -71,7 +71,17 @@ jobs:
         run: npx nx show projects --affected --base="${{ steps.shas.outputs.base }}" --head="${{ steps.shas.outputs.head }}"
 
       - name: Run affected web targets
-        run: npx nx affected -t build,test,typecheck --projects=web --base="${{ steps.shas.outputs.base }}" --head="${{ steps.shas.outputs.head }}"
+        shell: bash
+        run: |
+          if npx nx show projects --affected \
+            --base="${{ steps.shas.outputs.base }}" \
+            --head="${{ steps.shas.outputs.head }}" | grep -qx "web"; then
+            npx nx run-many \
+              -t build,test,typecheck \
+              -p web
+          else
+            echo "Web app not affected."
+          fi
 
       - name: Check affected API app
         shell: bash
