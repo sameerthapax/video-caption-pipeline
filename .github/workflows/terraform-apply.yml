@@ -8,6 +8,12 @@ on:
       - "infra/aws/**"
       - ".github/workflows/terraform-plan.yml"
       - ".github/workflows/terraform-apply.yml"
+      - ".github/workflows/worker-image.yml"
+  workflow_run:
+    workflows:
+      - Worker Image
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -21,6 +27,9 @@ concurrency:
 jobs:
   apply:
     name: Apply
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: development
     env:
