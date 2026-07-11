@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models.job import VideoJob
-//
 
 def claim_job_for_processing(*, db: Session, job_id: str) -> tuple[VideoJob | None, bool]:
     job = (
