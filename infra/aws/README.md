@@ -65,6 +65,9 @@ Set these in the `development` GitHub Environment:
 
 - `AWS_ROLE_ARN`: output from `infra/aws/bootstrap`.
 - `AWS_REGION`: normally `us-east-1`.
+- `TF_STATE_BUCKET`: bootstrap output `state_bucket`.
+- `TF_STATE_LOCK_TABLE`: bootstrap output `state_lock_table`.
+- `TF_STATE_KEY`: optional override for the Terraform state object key. Default is `video-caption-pipeline/dev/terraform.tfstate`.
 - `WORKER_ECR_REPOSITORY_URL`: output `worker_ecr_repository_url`.
 - `WORKER_LAMBDA_NAME`: output `worker_lambda_name` after the worker Lambda exists.
 
@@ -79,6 +82,7 @@ The Terraform app points Amplify at `https://github.com/${github_owner}/${github
 - output: `dist/apps/web`
 
 Authorize repository access in the Amplify console using the GitHub App, or provide `github_access_token` only as a sensitive local variable with the state-risk caveat.
+For GitHub Actions, set it as the `development` environment secret `TF_VAR_github_access_token`.
 
 ## Worker Image Bootstrap
 
@@ -114,6 +118,7 @@ terraform -chdir=infra/aws init \
 ```
 
 Fill `backend.hcl` from `backend.hcl.example` using the bootstrap `state_bucket` and `state_lock_table` outputs.
+GitHub Actions uses the same backend by generating `backend.ci.hcl` from `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`, and optional `TF_STATE_KEY`.
 
 ## Testing
 
