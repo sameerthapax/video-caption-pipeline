@@ -155,7 +155,7 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   }
 
   return fetch(`${API_BASE_URL}${path}`, {
-    credentials: 'include',
+    credentials: AUTH_DISABLED ? 'omit' : 'include',
     ...init,
     headers,
   });
