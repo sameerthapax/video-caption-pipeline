@@ -32,8 +32,23 @@ jobs:
       - name: Terraform fmt
         run: terraform fmt -check -recursive
 
+      - name: Validate backend configuration
+        run: |
+          test -n "${{ vars.TF_STATE_BUCKET }}"
+          test -n "${{ vars.TF_STATE_LOCK_TABLE }}"
+
+      - name: Write backend config
+        run: |
+          cat > backend.ci.hcl <<EOF
+          bucket         = "${{ vars.TF_STATE_BUCKET }}"
+          key            = "${{ vars.TF_STATE_KEY || 'video-caption-pipeline/dev/terraform.tfstate' }}"
+          region         = "${{ vars.AWS_REGION || 'us-east-1' }}"
+          encrypt        = true
+          dynamodb_table = "${{ vars.TF_STATE_LOCK_TABLE }}"
+          EOF
+
       - name: Terraform init
-        run: terraform init
+        run: terraform init -backend-config=backend.ci.hcl
 
       - name: Terraform validate
         run: terraform validate
