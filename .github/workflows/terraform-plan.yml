@@ -3,34 +3,120 @@ name: Terraform Plan
 on:
   pull_request:
     paths:
+      - "apps/**"
+      - "libs/**"
+      - "package.json"
+      - "package-lock.json"
+      - "nx.json"
+      - "tsconfig.base.json"
       - "infra/aws/**"
       - ".github/workflows/terraform-plan.yml"
       - ".github/workflows/terraform-apply.yml"
+
+  workflow_dispatch:
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
+  detect:
+    name: Detect affected applications
+    runs-on: ubuntu-latest
+
+    outputs:
+      should-plan: ${{ steps.affected.outputs.should-plan }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine Nx base and head
+        id: shas
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=$(git rev-parse HEAD~1)" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check affected applications
+        id: affected
+        shell: bash
+        run: |
+          # A direct Terraform change should always create a plan.
+          if ! git diff --quiet \
+            "${{ steps.shas.outputs.base }}" \
+            "${{ steps.shas.outputs.head }}" \
+            -- infra/aws; then
+            echo "Terraform infrastructure changed."
+            echo "should-plan=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          AFFECTED_PROJECTS="$(
+            npx nx show projects \
+              --affected \
+              --base="${{ steps.shas.outputs.base }}" \
+              --head="${{ steps.shas.outputs.head }}"
+          )"
+
+          echo "Affected projects:"
+          echo "$AFFECTED_PROJECTS"
+
+          if echo "$AFFECTED_PROJECTS" |
+            grep -Eq '^(api|web|worker)$'; then
+            echo "At least one deployed application is affected."
+            echo "should-plan=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No deployed applications or Terraform files are affected."
+            echo "should-plan=false" >> "$GITHUB_OUTPUT"
+          fi
+
   plan:
     name: Plan
+    needs: detect
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect.outputs.should-plan == 'true'
+
     runs-on: ubuntu-latest
     environment: development
+
     env:
       TF_VAR_github_access_token: ${{ secrets.TF_VAR_GITHUB_ACCESS_TOKEN }}
       TF_VAR_worker_image_uri: ${{ vars.TF_VAR_WORKER_IMAGE_URI }}
+
     defaults:
       run:
         working-directory: infra/aws
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.8.5"
 
@@ -38,11 +124,13 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Validate backend configuration
+        shell: bash
         run: |
           test -n "${{ vars.TF_STATE_BUCKET }}"
           test -n "${{ vars.TF_STATE_LOCK_TABLE }}"
 
       - name: Write backend config
+        shell: bash
         run: |
           cat > backend.ci.hcl <<EOF
           bucket         = "${{ vars.TF_STATE_BUCKET }}"
@@ -53,10 +141,10 @@ jobs:
           EOF
 
       - name: Terraform init
-        run: terraform init -backend-config=backend.ci.hcl
+        run: terraform init -input=false -backend-config=backend.ci.hcl
 
       - name: Terraform validate
         run: terraform validate
 
       - name: Terraform plan
-        run: terraform plan -input=false
+        run: terraform plan -input=false -no-color
