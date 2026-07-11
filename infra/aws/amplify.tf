@@ -8,29 +8,25 @@ resource "aws_amplify_app" "frontend" {
     VITE_API_URL = aws_apigatewayv2_stage.default.invoke_url
   }
 
-  build_spec = yamlencode({
-    version = 1
-    applications = [{
-      appRoot = local.frontend_app_root
-      frontend = {
-        phases = {
-          preBuild = {
-            commands = ["cd ../..", "npm ci"]
-          }
-          build = {
-            commands = ["npx nx build ${local.frontend_project_name}"]
-          }
-        }
-        artifacts = {
-          baseDirectory = "../../${local.frontend_output_dir}"
-          files         = ["**/*"]
-        }
-        cache = {
-          paths = ["../../node_modules/**/*", "../../.nx/cache/**/*"]
-        }
-      }
-    }]
-  })
+  build_spec = <<-EOT
+    version: 1
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npx nx build ${local.frontend_project_name}
+      artifacts:
+        baseDirectory: ${local.frontend_output_dir}
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+          - .nx/cache/**/*
+  EOT
 
   lifecycle {
     ignore_changes = [access_token]
