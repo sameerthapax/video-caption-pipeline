@@ -11,7 +11,7 @@ resource "aws_iam_role" "api_lambda" {
     }]
   })
 }
-
+//
 resource "aws_iam_role_policy" "api_lambda" {
   name = "${local.name_prefix}-api-lambda"
   role = aws_iam_role.api_lambda.id
