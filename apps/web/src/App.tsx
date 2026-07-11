@@ -6,7 +6,7 @@ import {
   UserCircle,
 } from '@phosphor-icons/react';
 import { NavLink, Outlet, Route, Routes } from 'react-router-dom';
-import { AuthContext } from './auth';
+import { AUTH_DISABLED, AuthContext } from './auth';
 import { AuthGate } from './components/AuthGate';
 import { DashboardPage } from './pages/DashboardPage';
 import { JobStatusPage } from './pages/JobStatusPage';
@@ -45,7 +45,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!user && !AUTH_DISABLED) {
     return <AuthGate />;
   }
 
@@ -66,7 +66,7 @@ export default function App() {
 function AppLayout() {
   const { logout, user } = useContext(AuthContext);
 
-  if (!user) {
+  if (!user && !AUTH_DISABLED) {
     return null;
   }
 
@@ -100,15 +100,16 @@ function AppLayout() {
             </nav>
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex min-h-10 items-center rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-muted)]">
-                {user.email ?? user.id}
+                {AUTH_DISABLED ? 'Guest mode' : (user?.email ?? user?.id)}
               </span>
               <button
                 className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--color-ink)] px-4 text-sm font-medium text-white transition duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-[#2f3437] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ink)] active:scale-[0.98]"
+                disabled={AUTH_DISABLED}
                 onClick={() => void logout()}
                 type="button"
               >
                 <SignOut size={16} weight="bold" />
-                Log out
+                {AUTH_DISABLED ? 'No auth' : 'Log out'}
               </button>
             </div>
           </div>
