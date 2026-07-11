@@ -33,6 +33,11 @@ output "worker_ecr_repository_url" {
   value       = aws_ecr_repository.worker.repository_url
 }
 
+output "api_ecr_repository_url" {
+  description = "ECR repository URL for the API container image."
+  value       = aws_ecr_repository.api.repository_url
+}
+
 output "worker_lambda_name" {
   description = "Worker Lambda function name. Empty until worker_image_uri is set."
   value       = var.worker_image_uri == "" ? "" : aws_lambda_function.worker[0].function_name
