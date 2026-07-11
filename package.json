@@ -18,7 +18,7 @@
     "build": "tsc -b apps/web/tsconfig.json && vite build --config apps/web/vite.config.mts",
     "lint": "eslint \"apps/web/src/**/*.{ts,tsx}\" \"libs/shared-types/src/**/*.ts\"",
     "typecheck:web": "tsc --noEmit -p apps/web/tsconfig.json",
-    "check:api": "sh -c 'cd apps/api && if [ -x .venv/bin/python ]; then .venv/bin/python -c \"from app.main import app; print(app.title)\"; elif [ -x ../../venv/bin/python ]; then ../../venv/bin/python -c \"from app.main import app; print(app.title)\"; else python3 -c \"from app.main import app; print(app.title)\"; fi'",
+    "check:api": "sh -c 'cd apps/api && export DATABASE_URL=\"${DATABASE_URL:-sqlite+pysqlite:///./check_api.db}\" && if [ -x .venv/bin/python ]; then .venv/bin/python -c \"from app.main import app; print(app.title)\"; elif [ -x ../../venv/bin/python ]; then ../../venv/bin/python -c \"from app.main import app; print(app.title)\"; else python3 -c \"from app.main import app; print(app.title)\"; fi'",
     "test:api": "sh -c 'cd apps/api && if [ -x .venv/bin/python ]; then .venv/bin/python -m pytest; elif [ -x ../../venv/bin/python ]; then ../../venv/bin/python -m pytest; else python3 -m pytest; fi'",
     "test:web": "vitest run --config apps/web/vite.config.mts",
     "test": "npm run test:web && npm run test:api",
