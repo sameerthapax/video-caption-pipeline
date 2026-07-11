@@ -7,7 +7,7 @@ os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "test-service-role-key"
 import pytest
 
 from core.database import Base, engine
-from models.job import VideoJob
+from models.job import VideoCaptionResult, VideoJob
 
 
 @pytest.fixture(autouse=True)

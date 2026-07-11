@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import shutil
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from models.job import VideoJob
+from pipeline.style import style_captions
+from pipeline.run_extraction_stage import run_video_extraction_stage
+from pipeline.run_vlm_stage import run_vlm_reasoning_stage
 from services.events import WorkerProgressEvent
+from services.fireworks_client import FireworksClient, FireworksConfig
 from services.jobs import claim_job_for_processing, update_job_progress
+from services.openai_responses_client import OpenAIResponsesClient, OpenAIResponsesConfig
 from services.process import ProcessExecutionError, ProbeMetadata, probe_media, run_command
+from services.results import upsert_caption_result
 from storage.supabase import StorageDownloadError, StorageUploadError, download_private_object, upload_private_object
 
 logger = logging.getLogger("video-caption-pipeline.worker")
@@ -88,7 +96,7 @@ def process_video_job(*, db: Session, job_id: str) -> Iterator[WorkerProgressEve
             metadata=_metadata_dict(probe_metadata),
         )
 
-        yield from _preprocess_media(
+        cleaned_artifacts = yield from _preprocess_media(
             db=db,
             job=job,
             input_path=original_input_path,
@@ -96,16 +104,106 @@ def process_video_job(*, db: Session, job_id: str) -> Iterator[WorkerProgressEve
             source_probe=probe_metadata,
         )
 
+        yield WorkerProgressEvent(
+            event="extraction_started",
+            job_id=job.id,
+            step="downloading_clean_assets",
+            message="Handing off cleaned assets into the extraction stage.",
+            progress=10,
+            metadata=cleaned_artifacts,
+        )
+        artifact_paths = asyncio.run(
+            run_video_extraction_stage(
+                job_id=job.id,
+                bucket=job.storage_bucket,
+                clean_video_storage_path=cleaned_artifacts["video_object_path"],
+                clean_audio_storage_path=cleaned_artifacts["audio_object_path"] or "",
+                finalize_job=False,
+                local_video_path_override=cleaned_artifacts["local_video_path"],
+                local_audio_path_override=cleaned_artifacts["local_audio_path"],
+                keep_local_artifacts=True,
+                upload_artifacts=False,
+            )
+        )
+        yield WorkerProgressEvent(
+            event="extraction_completed",
+            job_id=job.id,
+            step="extraction_completed",
+            message="Video extraction stage completed.",
+            progress=100,
+            metadata=artifact_paths,
+        )
+        yield WorkerProgressEvent(
+            event="vlm_reasoning_started",
+            job_id=job.id,
+            step="loading_temporal_segments",
+            message="Starting hierarchical VLM reasoning stage.",
+            progress=10,
+            metadata={"temporal_segments_json": artifact_paths.get("temporal_segments_json")},
+        )
+        vlm_artifact_paths = asyncio.run(
+            run_vlm_reasoning_stage(
+                job_id=job.id,
+                bucket=job.storage_bucket,
+                temporal_segments_storage_path=artifact_paths["temporal_segments_json"],
+                local_temporal_segments_path=artifact_paths.get("local_temporal_segments_json"),
+                local_audio_path=artifact_paths.get("local_audio_path"),
+                local_frame_sampling_path=artifact_paths.get("local_frame_sampling_json"),
+                transcription_source_audio_storage_path=artifact_paths.get("source_audio_storage_path", ""),
+                reuse_local_segment_frames=True,
+                keep_local_artifacts=True,
+            )
+        )
+        yield WorkerProgressEvent(
+            event="vlm_reasoning_completed",
+            job_id=job.id,
+            step="vlm_reasoning_completed",
+            message="Hierarchical VLM reasoning stage completed.",
+            progress=90,
+            metadata=vlm_artifact_paths,
+        )
+        yield WorkerProgressEvent(
+            event="generating_styled_captions_started",
+            job_id=job.id,
+            step="generating_styled_captions",
+            message="Generating final caption variants from the global factual summary.",
+            progress=92,
+            metadata={"global_factual_summary_json": vlm_artifact_paths.get("global_factual_summary_json")},
+        )
+        update_job_progress(db=db, job=job, current_step="generating_styled_captions", progress=92)
+        final_result, local_final_result_path, uploaded_final_result_path = asyncio.run(
+            _run_final_caption_stage(
+                job=job,
+                global_summary_path=vlm_artifact_paths["local_global_factual_summary_json"],
+                global_summary_storage_path=vlm_artifact_paths["global_factual_summary_json"],
+            )
+        )
+        upsert_caption_result(db=db, job=job, final_result=final_result)
         update_job_progress(
             db=db,
             job=job,
-            status="processing",
-            current_step="preprocessing_completed",
-            progress=95,
-            error_message="",
+            status="completed",
+            current_step="completed",
+            progress=100,
+            preprocessing_metadata=None,
         )
-        logger.info("Worker left job %s in preprocessing_completed for downstream stages", job.id)
-    except (JobProcessingError, StorageDownloadError, StorageUploadError, ProcessExecutionError) as exc:
+        job.artifact_paths = {
+            **dict(job.artifact_paths or {}),
+            "final_result_json": uploaded_final_result_path,
+            "local_final_result_json": local_final_result_path,
+        }
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        yield WorkerProgressEvent(
+            event="completed",
+            job_id=job.id,
+            step="completed",
+            message="Final caption set generated and stored.",
+            progress=100,
+            metadata={"final_result_json": uploaded_final_result_path},
+        )
+    except (JobProcessingError, StorageDownloadError, StorageUploadError, ProcessExecutionError, RuntimeError, ValueError) as exc:
         safe_message = str(exc)
         logger.exception("Worker failed job %s during step %s: %s", job.id, job.current_step, safe_message)
         update_job_progress(
@@ -218,7 +316,7 @@ def _preprocess_media(
     input_path: Path,
     processed_dir: Path,
     source_probe: ProbeMetadata,
-) -> Iterator[WorkerProgressEvent]:
+) -> Generator[WorkerProgressEvent, None, dict[str, str | None]]:
     update_job_progress(db=db, job=job, current_step="preprocessing", progress=55)
     logger.info(
         "Starting preprocessing for job %s with source fps=%s and has_audio=%s",
@@ -380,22 +478,32 @@ def _preprocess_media(
         },
     )
 
-    upload_private_object(
-        bucket=job.storage_bucket,
-        object_path=cleaned_video_object_path,
-        source=normalized_path,
-        content_type="video/mp4",
-    )
-    logger.info("Uploaded cleaned video artifact for job %s to %s", job.id, cleaned_video_object_path)
-
     uploaded_audio_object_path: str | None = None
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(
+                upload_private_object,
+                bucket=job.storage_bucket,
+                object_path=cleaned_video_object_path,
+                source=normalized_path,
+                content_type="video/mp4",
+            )
+        ]
+        if source_probe.has_audio:
+            futures.append(
+                executor.submit(
+                    upload_private_object,
+                    bucket=job.storage_bucket,
+                    object_path=cleaned_audio_object_path,
+                    source=audio_path,
+                    content_type="application/octet-stream",
+                )
+            )
+        for future in futures:
+            future.result()
+
+    logger.info("Uploaded cleaned video artifact for job %s to %s", job.id, cleaned_video_object_path)
     if source_probe.has_audio:
-        upload_private_object(
-            bucket=job.storage_bucket,
-            object_path=cleaned_audio_object_path,
-            source=audio_path,
-            content_type="application/octet-stream",
-        )
         uploaded_audio_object_path = cleaned_audio_object_path
         logger.info("Uploaded cleaned audio artifact for job %s to %s", job.id, cleaned_audio_object_path)
 
@@ -437,6 +545,13 @@ def _preprocess_media(
             "audio": {"sample_rate_hz": 24000 if source_probe.has_audio else None},
         },
     )
+    return {
+        "bucket": job.storage_bucket,
+        "video_object_path": cleaned_video_object_path,
+        "audio_object_path": uploaded_audio_object_path,
+        "local_video_path": str(normalized_path),
+        "local_audio_path": str(audio_path) if source_probe.has_audio else None,
+    }
 
 
 def _resolve_extension(job: VideoJob) -> str:
@@ -473,3 +588,36 @@ def _build_cleaned_object_path(*, job: VideoJob, suffix: str, extension: str) ->
     stem = Path(job.original_filename).stem
     filename = f"cleaned_{stem}_{suffix}{extension}"
     return f"{parent_prefix}/{filename}"
+
+
+async def _run_final_caption_stage(
+    *,
+    job: VideoJob,
+    global_summary_path: str,
+    global_summary_storage_path: str,
+):
+    if not settings.openai_api_key:
+        raise ValueError("OPENAI_API_KEY is required for final caption generation.")
+    if not settings.openai_final_caption_model:
+        raise ValueError("OPENAI_FINAL_CAPTION_MODEL is required for final caption generation.")
+
+    openai_client = OpenAIResponsesClient(
+        OpenAIResponsesConfig(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+            timeout_seconds=settings.openai_timeout_seconds,
+            max_retries=settings.openai_max_retries,
+            reasoning_effort=settings.openai_reasoning_effort,
+            text_verbosity=settings.openai_text_verbosity,
+        )
+    )
+    storage_prefix = f"processed/{job.id}"
+    return await style_captions(
+        client=openai_client,
+        model=settings.openai_final_caption_model,
+        job_id=job.id,
+        bucket=job.storage_bucket,
+        storage_prefix=storage_prefix,
+        global_summary_path=Path(global_summary_path),
+        global_summary_storage_path=global_summary_storage_path,
+    )

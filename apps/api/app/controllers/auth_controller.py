@@ -1,7 +1,9 @@
 from fastapi import Request, Response, status
+from sqlalchemy.orm import Session
 
 from app.core.auth import ACCESS_TOKEN_COOKIE, AuthenticatedUser, clear_auth_cookies, issue_csrf_cookie, set_auth_cookies
-from app.schemas.auth import AuthCredentialsRequest, AuthSessionResponse, AuthUserResponse
+from app.schemas.auth import AuthCredentialsRequest, AuthProfileResponse, AuthSessionResponse, AuthUserResponse
+from app.services.job_service import summarize_jobs_for_user
 from app.services.auth_service import sign_in_with_password, sign_out_session, sign_up_with_password
 
 
@@ -29,3 +31,9 @@ def sign_out(*, request: Request, response: Response) -> Response:
 def get_session(*, user: AuthenticatedUser, response: Response) -> AuthSessionResponse:
     issue_csrf_cookie(response)
     return AuthSessionResponse(user=AuthUserResponse(id=user.id, email=user.email))
+
+
+def get_profile(*, user: AuthenticatedUser, response: Response, db: Session) -> AuthProfileResponse:
+    issue_csrf_cookie(response)
+    summary = summarize_jobs_for_user(db=db, user_id=user.id)
+    return AuthProfileResponse(user=AuthUserResponse(id=user.id, email=user.email), **summary)

@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
+from app.core.database import SessionLocal
 from app.core.auth import ACCESS_TOKEN_COOKIE, CSRF_COOKIE, CSRF_HEADER, REFRESH_TOKEN_COOKIE
+from app.models.job import VideoJob
 
 
 def test_signup_sets_auth_cookies(client, monkeypatch):
@@ -78,3 +80,44 @@ def test_logout_requires_csrf_header(client):
     response = client.post("/api/auth/logout/")
 
     assert response.status_code == 403
+
+
+def test_profile_returns_job_summary(client):
+    db = SessionLocal()
+    db.add_all(
+        [
+            VideoJob(
+                user_id="test-user-id",
+                original_filename="finished.mp4",
+                storage_bucket="videos",
+                video_path="videos/finished.mp4",
+                upload_content_type="video/mp4",
+                upload_file_size=1234,
+                status="completed",
+                current_step="completed",
+                progress=100,
+            ),
+            VideoJob(
+                user_id="test-user-id",
+                original_filename="processing.mp4",
+                storage_bucket="videos",
+                video_path="videos/processing.mp4",
+                upload_content_type="video/mp4",
+                upload_file_size=4321,
+                status="processing",
+                current_step="processing_segment_2",
+                progress=48,
+            ),
+        ]
+    )
+    db.commit()
+    db.close()
+
+    response = client.get("/api/auth/profile/")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user"]["id"] == "test-user-id"
+    assert payload["total_jobs"] == 2
+    assert payload["completed_jobs"] == 1
+    assert payload["active_jobs"] == 1

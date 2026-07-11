@@ -22,6 +22,7 @@ class VideoJob(Base):
     error_message: Mapped[str] = mapped_column(Text, default="")
     processing_started_at = mapped_column(DateTime(timezone=True), nullable=True)
     preprocessing_metadata = mapped_column(JSON, default=dict)
+    artifact_paths = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

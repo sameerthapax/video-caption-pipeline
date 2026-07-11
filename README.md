@@ -7,12 +7,12 @@ Hackathon-ready monorepo skeleton for uploading short videos with a dedicated AP
 - Monorepo manager: Nx
 - Frontend: React + TypeScript with Vite
 - Backend API: FastAPI + SQLAlchemy
-- Worker: Python processing service scaffold
+- Worker: Python processing service for preprocessing, extraction, and hierarchical VLM reasoning
 - Database/Auth/Storage: Supabase
 - Infra scaffold: Terraform
 - CI scaffold: GitHub Actions
 
-The current implementation is intentionally simple: local file uploads, Supabase-backed Postgres via `DATABASE_URL`, a structured FastAPI API app for auth and persistence, and a separate worker scaffold for future processing orchestration.
+The current implementation uses local file uploads, Supabase-backed Postgres via `DATABASE_URL`, a structured FastAPI API app for auth and persistence, and a separate worker that preprocesses uploads, builds extraction artifacts, and performs hierarchical VLM reasoning through Fireworks.
 
 For local data services, the repo now uses the existing `supabase/` project with a pruned CLI stack that keeps:
 
@@ -50,8 +50,9 @@ apps/api (FastAPI)
 
 apps/worker (Python worker)
   -> claims processing jobs
-  -> runs normalize/extract/transcribe/describe/summarize/style steps
-  -> writes result state back to Postgres
+  -> preprocesses media, extracts frames, builds transcript windows, and creates temporal segments
+  -> runs hierarchical VLM reasoning over 5 temporal segments with Fireworks
+  -> uploads extraction and VLM artifacts to Supabase Storage and writes job progress back to Postgres
 
 libs/shared-types
   -> shared frontend API types
@@ -69,7 +70,7 @@ infra/terraform
 apps/
   web/                  React + TypeScript frontend
   api/                  FastAPI auth + persistence API
-  worker/               Processing worker scaffold
+  worker/               Processing worker
 libs/
   shared-types/         Shared frontend TypeScript contracts
 docs/                   Architecture and API docs
@@ -117,6 +118,9 @@ Important variables:
 - `APP_ENV`
 - `APP_DEBUG`
 - `CORS_ALLOWED_ORIGINS`
+- `GOOGLE_GEMINI_API_KEY`
+- `FIREWORKS_API_KEY`
+- `FIREWORKS_MODEL`
 
 `DATABASE_URL` is required.
 
@@ -132,7 +136,7 @@ After starting Supabase, replace the placeholder auth keys with the output of:
 npm run supabase:env
 ```
 
-The frontend only needs `VITE_API_BASE_URL`. FastAPI owns the Supabase auth credentials and is the only layer that talks to Supabase Auth.
+The frontend only needs `VITE_API_BASE_URL`. FastAPI owns the Supabase auth credentials and is the only layer that talks to Supabase Auth. The worker additionally requires `GOOGLE_GEMINI_API_KEY` for transcription and `FIREWORKS_API_KEY` plus `FIREWORKS_MODEL` for hierarchical VLM reasoning.
 
 ### 3. Prepare the backend database
 
@@ -233,7 +237,7 @@ Notes:
 
 - `npm run dev:web`: Start the React frontend on port `5173`
 - `npm run dev:api`: Start the FastAPI backend on port `8000`
-- `npm run dev:worker`: Start the worker scaffold locally
+- `npm run dev:worker`: Start the worker locally
 - `npm run dev`: Run frontend, API, and worker together
 - `npm run dev:stack`: Start API, worker, and Redis together with Docker Compose
 - `npm run redis:start`: Start the local Redis container

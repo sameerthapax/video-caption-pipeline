@@ -11,6 +11,8 @@ values (
     'video/x-matroska',
     'audio/wav',
     'audio/x-wav',
+    'image/jpeg',
+    'application/json',
     'application/octet-stream'
   ]
 )
@@ -19,8 +21,6 @@ set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
-
-alter table storage.objects enable row level security;
 
 drop policy if exists "videos_objects_insert_own" on storage.objects;
 drop policy if exists "videos_objects_update_own" on storage.objects;

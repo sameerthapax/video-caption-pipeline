@@ -93,8 +93,8 @@ Response `200 OK`:
 {
   "id": "0d3ae1fb-13f8-4eb8-9896-0d4f327c6bc7",
   "status": "processing",
-  "current_step": "transcribing_audio",
-  "progress": 45,
+  "current_step": "processing_segment_3",
+  "progress": 50,
   "error_message": "",
   "original_filename": "demo.mp4",
   "created_at": "2026-07-06T20:00:00Z",
@@ -128,4 +128,8 @@ Response `200 OK`:
 - The frontend maps the snake_case API fields into camelCase client types.
 - The browser uploads the file directly to Supabase Storage with the signed URL and then calls either the normal completion endpoint or the SSE completion endpoint.
 - The API surface is worker-agnostic: processing happens in the separate worker service, not inside FastAPI.
-- The current worker stub only acknowledges that the queued job is visible; it does not mark the job `processing` or `completed`.
+- The worker now updates durable job progress through preprocessing, extraction, temporal segmentation, and hierarchical VLM reasoning.
+- Current VLM progress steps are `loading_temporal_segments`, `processing_segment_1` through `processing_segment_5`, `generating_global_summary`, and `vlm_reasoning_completed`.
+- Current extraction artifacts are `frame_sampling.json`, `temporal_segments.json`, and `transcription_request.json`.
+- Current VLM artifacts are `vlm_segments.json`, `video_memory.json`, and `global_factual_summary.json`.
+- Final styled caption outputs are not implemented yet, so the result endpoint contract shown above is still ahead of the current worker pipeline.

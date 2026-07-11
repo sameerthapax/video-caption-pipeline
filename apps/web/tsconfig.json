@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": true,
     "tsBuildInfoFile": "../../dist/apps/web/tsconfig.tsbuildinfo",
+    "moduleResolution": "bundler",
     "types": [
       "vite/client",
       "vitest/globals"

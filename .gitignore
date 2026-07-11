@@ -15,3 +15,25 @@ apps/api/test_api.db
 apps/api/media/videos/*
 !apps/api/media/videos/.gitkeep
 .idea/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan
+*.plan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+infra/aws/.terraform-build/
+infra/aws/*.zip
+
+# Local generated secrets
+*.secret
+*.secrets
+secrets.local.*

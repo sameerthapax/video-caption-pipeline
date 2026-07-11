@@ -1,0 +1,29 @@
+aws_region  = "us-east-1"
+environment = "dev"
+
+github_owner      = "sameerthapax"
+github_repository = "video-caption-pipeline"
+github_branch     = "main"
+
+allowed_frontend_origins = [
+  "http://localhost:5173"
+]
+
+source_video_retention_days = 3
+artifact_retention_days     = 7
+enable_dynamodb_pitr        = false
+
+# Prefer authorizing the Amplify GitHub App instead of setting this value.
+# github_access_token = "ghp_example"
+
+# Prefer creating this secret outside Terraform and referencing its ARN.
+# model_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:video-caption-model-keys"
+
+fireworks_model            = "accounts/fireworks/models/example"
+openai_final_caption_model = "gpt-5.5"
+
+# Set after pushing the first immutable ECR image.
+# worker_image_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/video-caption-pipeline-dev-worker:<git-sha>"
+
+# budget_email = "you@example.com"
+budget_monthly_limit_usd = 10

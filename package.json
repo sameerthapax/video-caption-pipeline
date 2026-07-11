@@ -22,7 +22,12 @@
     "test:api": "sh -c 'cd apps/api && if [ -x .venv/bin/python ]; then .venv/bin/python -m pytest; elif [ -x ../../venv/bin/python ]; then ../../venv/bin/python -m pytest; else python3 -m pytest; fi'",
     "test:web": "vitest run --config apps/web/vite.config.mts",
     "test": "npm run test:web && npm run test:api",
-    "format": "prettier --check ."
+    "format": "prettier --check .",
+    "aws-tf-init": "terraform -chdir=infra/aws init",
+    "aws-tf-plan": "terraform -chdir=infra/aws plan",
+    "aws-tf-apply": "terraform -chdir=infra/aws apply",
+    "aws-tf-destroy": "terraform -chdir=infra/aws destroy",
+    "aws-worker-build": "docker build -f apps/worker/Dockerfile.lambda -t video-caption-pipeline-worker:local ."
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
@@ -44,7 +49,11 @@
     "vitest": "^2.1.4"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@tailwindcss/vite": "^4.3.2",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.1",
+    "tailwindcss": "^4.3.2"
   }
 }
